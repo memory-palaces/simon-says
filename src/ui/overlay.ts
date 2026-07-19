@@ -49,7 +49,7 @@ export class Overlay {
         <kbd>Mouse</kbd><span>look around</span>
         <kbd>Shift</kbd><span>run</span>
         <kbd>F</kbd><span>toggle fly (no gravity)</span>
-        <kbd>Space</kbd> <kbd>C</kbd><span>up / down while flying</span>
+        <span class="keycombo"><kbd>Space</kbd><kbd>C</kbd></span><span>up / down while flying</span>
         <kbd>Esc</kbd><span>release cursor</span>
       </div>
       <p class="hint">Click to enter</p>

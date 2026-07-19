@@ -77,6 +77,11 @@ canvas {
   font-size: 13px;
 }
 
+.panel .keycombo {
+  display: inline-flex;
+  gap: 6px;
+}
+
 .panel kbd {
   display: inline-block;
   min-width: 20px;
