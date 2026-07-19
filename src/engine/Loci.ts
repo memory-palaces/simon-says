@@ -96,10 +96,13 @@ export class LociLayer {
       tex.colorSpace = THREE.SRGBColorSpace;
       if (!marker.image) {
         marker.image = new THREE.Sprite(
-          new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }),
+          // depthTest off + a high renderOrder: draw the image as an always-visible
+          // label so a nearby wall/floor can't clip the camera-facing quad.
+          new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }),
         );
         marker.image.scale.setScalar(0.9);
         marker.image.position.y = 1.0;
+        marker.image.renderOrder = 10;
         marker.group.add(marker.image);
       } else {
         const mat = marker.image.material as THREE.SpriteMaterial;
