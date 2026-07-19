@@ -94,22 +94,61 @@ export class Viewer {
   }
 
   /**
-   * Pick a spawn point: horizontal centre of the model, standing on the LOWEST
-   * surface directly below (street / ground floor, not a rooftop the top-down ray
-   * hits first). Falls back to the bounding-box floor if the ray misses entirely.
+   * Drop the walker somewhere they can actually see the model. We probe a few
+   * columns (centre first) for the lowest UP-FACING floor — an up-facing surface
+   * so we don't spawn on the underside of a roof, lowest so we get the street /
+   * ground floor rather than a rooftop. If no column has a floor (an open object
+   * with nothing under the middle), we frame the whole model from outside instead
+   * of stranding the camera in empty space staring at the void.
    */
   private spawnInside(model: LoadedModel): void {
+    const b = model.bounds;
     const center = new THREE.Vector3();
-    model.bounds.getCenter(center);
+    b.getCenter(center);
+    const size = new THREE.Vector3();
+    b.getSize(size);
 
-    const ray = new THREE.Raycaster(
-      new THREE.Vector3(center.x, model.bounds.max.y + 1, center.z),
-      new THREE.Vector3(0, -1, 0),
-    );
-    const hits = ray.intersectObject(model.scene, true);
-    const floorY = hits.length > 0 ? hits[hits.length - 1].point.y : model.bounds.min.y;
+    const columns: Array<[number, number]> = [
+      [center.x, center.z],
+      [center.x - size.x * 0.25, center.z],
+      [center.x + size.x * 0.25, center.z],
+      [center.x, center.z - size.z * 0.25],
+      [center.x, center.z + size.z * 0.25],
+    ];
 
-    this.fp.teleport(new THREE.Vector3(center.x, floorY + this.fp.eyeOffset, center.z));
+    for (const [x, z] of columns) {
+      const floorY = this.floorAt(model.scene, x, z, b.max.y + 1);
+      if (floorY === null) continue;
+      const pos = new THREE.Vector3(x, floorY + this.fp.eyeOffset, z);
+      // Face the model's centre (kept horizontal) so there's geometry in view.
+      const look = new THREE.Vector3(center.x, pos.y, center.z);
+      if (look.distanceToSquared(pos) < 1) look.set(pos.x + 1, pos.y, pos.z);
+      this.fp.teleport(pos);
+      this.camera.lookAt(look);
+      return;
+    }
+
+    // Nothing to stand on under any column: frame it from outside and look at it.
+    const dist = Math.max(size.x, size.y, size.z) * 0.9 + 2;
+    this.fp.teleport(new THREE.Vector3(center.x, b.max.y + size.y * 0.15, center.z + dist));
+    this.camera.lookAt(center);
+  }
+
+  /** Lowest up-facing floor height under (x, z), or null if nothing is below. */
+  private floorAt(root: THREE.Object3D, x: number, z: number, topY: number): number | null {
+    this.pickRay.set(new THREE.Vector3(x, topY, z), new THREE.Vector3(0, -1, 0));
+    this.pickRay.far = Infinity;
+    const hits = this.pickRay.intersectObject(root, true);
+    if (hits.length === 0) return null;
+    // Walk from the lowest hit upward; take the first surface that faces up.
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const hit = hits[i];
+      if (!hit.face) return hit.point.y;
+      this.normalMat.getNormalMatrix(hit.object.matrixWorld);
+      const ny = new THREE.Vector3().copy(hit.face.normal).applyNormalMatrix(this.normalMat).normalize().y;
+      if (ny > 0.3) return hit.point.y;
+    }
+    return hits[hits.length - 1].point.y; // no up-facing surface; use the lowest
   }
 
   async loadUrl(url: string): Promise<void> {
