@@ -12,6 +12,7 @@ import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
 import { SettingsDialog } from './ui/settingsDialog';
 import { Toasts } from './ui/toasts';
+import { openGoToDialog } from './ui/goToDialog';
 import { chooseAction } from './ui/choice';
 import {
   applyStyle,
@@ -296,6 +297,22 @@ class App {
     }
   }
 
+  /** Ctrl/Cmd+G: jump to a locus by number or name. */
+  private openGoTo(): void {
+    if (this.palace.loci.length === 0) {
+      this.toasts.info('No loci to go to yet.');
+      return;
+    }
+    // Release the pointer so the user can type into the palette.
+    if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
+    const items = lociInOrder(this.palace).map((l) => ({ id: l.id, order: l.order, label: l.label }));
+    openGoToDialog(this.mount, items, (id) => {
+      this.gotoLocus(id);
+      const l = this.palace.loci.find((x) => x.id === id);
+      if (l) this.toasts.info(`Jumped to #${l.order}${l.label ? ` — ${l.label}` : ''}`);
+    });
+  }
+
   private toggleXray(): void {
     const on = !this.loci.xrayOn;
     this.loci.setXray(on);
@@ -391,6 +408,11 @@ class App {
       const target = e.target as HTMLElement | null;
       const inField = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
       const key = e.key.toLowerCase();
+      if (key === 'g') {
+        e.preventDefault();
+        this.openGoTo();
+        return;
+      }
       if (!inField && (key === 'z' || key === 'y')) {
         e.preventDefault();
         if (key === 'y' || e.shiftKey) this.redo();

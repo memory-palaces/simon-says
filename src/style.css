@@ -524,6 +524,67 @@ canvas {
   margin-top: 2px;
 }
 
+/* --- Go-to palette --------------------------------------------------------- */
+
+.goto-card {
+  position: fixed;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 92vw);
+  background: var(--ui-bg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  padding: 12px;
+}
+.goto-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: var(--ui-fg);
+  font-size: 15px;
+  padding: 10px 12px;
+  outline: none;
+}
+.goto-input:focus {
+  border-color: var(--ui-accent);
+}
+.goto-list {
+  margin-top: 8px;
+  max-height: 44vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.goto-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--ui-fg);
+}
+.goto-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.goto-num {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  color: #1a1400;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* --- Toasts + activity log -------------------------------------------------- */
 
 .toast-stack {
