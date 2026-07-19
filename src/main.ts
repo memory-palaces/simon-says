@@ -88,6 +88,8 @@ class App {
   private draftTimer = 0;
   /** False when there are edits since the last explicit Save or load. */
   private savedClean = true;
+  /** The file this palace is bound to (File System Access), so Save writes back to it. */
+  private fileHandle: FileSystemFileHandle | null = null;
 
   private readonly history = new History<Palace>(100);
   private histTimer = 0;
@@ -211,11 +213,15 @@ class App {
     this.draftTimer = window.setTimeout(() => saveDraft(this.root), 400);
   }
 
-  /** Explicit Save to a file; clears the unsaved-changes flag on success. */
-  private async save(): Promise<void> {
-    await savePalace(this.root);
+  /** Save back to the bound file (or Save As the first time). Ctrl+S. */
+  private async save(forceNew = false): Promise<void> {
+    const outcome = await savePalace(this.root, forceNew ? null : this.fileHandle);
+    if (outcome.status === 'cancelled') return;
+    if (outcome.status === 'handle') this.fileHandle = outcome.handle;
     this.savedClean = true;
-    this.toasts.success(`Saved “${this.palace.name}”`);
+    this.toasts.success(
+      outcome.status === 'handle' ? `Saved “${this.root.name}”` : `Downloaded “${this.root.name}.json”`,
+    );
   }
 
   /**
@@ -431,6 +437,11 @@ class App {
       const target = e.target as HTMLElement | null;
       const inField = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
       const key = e.key.toLowerCase();
+      if (key === 's') {
+        e.preventDefault(); // don't let the browser "save page"
+        void this.save(e.shiftKey); // Ctrl+Shift+S = Save As
+        return;
+      }
       if (key === 'g') {
         e.preventDefault();
         this.openGoTo();
@@ -704,6 +715,7 @@ class App {
     this.palace = createEmptyPalace();
     this.root = this.palace;
     this.navStack = [];
+    this.fileHandle = null;
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
     this.editor.setNotice(null); // clear any stale "drag the geometry" message
@@ -949,6 +961,7 @@ class App {
       this.palace = createEmptyPalace(baseName(file.name));
       this.root = this.palace;
       this.navStack = [];
+      this.fileHandle = null;
       this.selectedId = null;
       this.viewer.applyEnvironment(this.palace.environment);
       await this.viewer.loadUrl(dataUrl);
@@ -969,6 +982,7 @@ class App {
     if (!(await this.confirmDiscard(`Load “${file.name}”?`))) return;
     try {
       const palace = await readPalaceFile(file);
+      this.fileHandle = null; // a dropped file isn't writable; Save will Save As
       await this.adoptPalace(palace);
     } catch (err) {
       console.error(err);
@@ -979,8 +993,11 @@ class App {
   private async loadViaPicker(): Promise<void> {
     if (!(await this.confirmDiscard('Load a palace?'))) return;
     try {
-      const palace = await openPalace();
-      if (palace) await this.adoptPalace(palace);
+      const opened = await openPalace();
+      if (opened) {
+        this.fileHandle = opened.handle; // save writes back to this file
+        await this.adoptPalace(opened.palace);
+      }
     } catch (err) {
       console.error(err);
       this.overlay.showError('Could not open that palace file.');
