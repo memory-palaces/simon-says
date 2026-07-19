@@ -8,6 +8,7 @@ export class Overlay {
   private readonly panelBody: HTMLElement;
   private readonly hud: HTMLElement;
   private readonly crosshair: HTMLElement;
+  private readonly tooltip: HTMLElement;
 
   onResume: (() => void) | null = null;
 
@@ -20,10 +21,22 @@ export class Overlay {
 
     this.crosshair = el('div', 'crosshair');
     this.hud = el('div', 'hud');
+    this.tooltip = el('div', 'tooltip');
 
     mount.appendChild(this.crosshair);
     mount.appendChild(this.hud);
+    mount.appendChild(this.tooltip);
     mount.appendChild(this.root);
+  }
+
+  /** A floating label near the crosshair (e.g. the name of the orb you're aiming at). */
+  setTooltip(html: string | null): void {
+    if (html) {
+      this.tooltip.innerHTML = html;
+      this.tooltip.classList.add('visible');
+    } else {
+      this.tooltip.classList.remove('visible');
+    }
   }
 
   showLoading(name: string): void {

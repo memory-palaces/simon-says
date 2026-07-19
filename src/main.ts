@@ -41,6 +41,7 @@ import {
   setAsset,
   type Locus,
   type Palace,
+  type Vec3,
 } from './model/palace';
 
 // Bundled zero-config sample so the app renders the instant it's cloned.
@@ -150,6 +151,7 @@ class App {
       attachImage: (id) => this.attachFile(id, 'image'),
       attachMesh: (id) => this.attachFile(id, 'mesh'),
       setObjectScale: (id, v) => this.setObjectScale(id, v),
+      setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
       setStyle: (id) => this.setStyle(id),
       setFalModel: (model) => this.setFalModel(model),
       enterChild: (id) => this.enterChild(id),
@@ -212,6 +214,7 @@ class App {
     } else if (mode === 'edit') {
       this.overlay.setCrosshair(false);
       this.overlay.setHud('');
+      this.overlay.setTooltip(null);
       this.review.hide();
       this.overlay.hide();
       this.movingId = null;
@@ -452,11 +455,28 @@ class App {
       } else {
         // Highlight whatever marker the crosshair is over.
         const id = this.loci.pick(this.crosshairRay());
-        this.targetedId = id;
-        this.loci.setTargeted(id);
+        if (id !== this.targetedId) {
+          this.targetedId = id;
+          this.loci.setTargeted(id);
+          this.updateTooltip();
+        }
       }
       this.updateWalkHud();
     }
+  }
+
+  /** Floating title (+ notes preview) near the crosshair for the aimed-at orb. */
+  private updateTooltip(): void {
+    const t = this.targetedId ? this.palace.loci.find((l) => l.id === this.targetedId) : null;
+    if (!t) {
+      this.overlay.setTooltip(null);
+      return;
+    }
+    const title = escapeHtml(t.label || `Locus ${t.order}`);
+    const notes = t.notes?.trim();
+    const notesHtml = notes ? `<div class="tt-notes">${escapeHtml(notes.slice(0, 140))}${notes.length > 140 ? '…' : ''}</div>` : '';
+    const door = t.child_palace ? '<div class="tt-door">↳ inner palace — Enter</div>' : '';
+    this.overlay.setTooltip(`<div class="tt-title">${title}</div>${notesHtml}${door}`);
   }
 
   private readonly _ray = new THREE.Raycaster();
@@ -518,7 +538,10 @@ class App {
         // Only descend into an EXISTING child; creating one stays explicit (panel).
         const l = this.palace.loci.find((x) => x.id === this.targetedId);
         if (l?.child_palace) void this.enterChild(this.targetedId);
-      } else if (e.code === 'Backspace') void this.returnToParent();
+      } else if (e.code === 'Backspace') {
+        e.preventDefault(); // stop Firefox from navigating back
+        void this.returnToParent();
+      }
     } else if (this.mode === 'review') {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
@@ -698,7 +721,9 @@ class App {
 
   /** Render the locus's own words to a 2D image via the active backend, verbatim. */
   private generateFor(id: string): void {
-    const backend = getBackend(this.activeBackendId());
+    // Fall back to the offline placeholder if this world has no pipeline chosen,
+    // so Render always does something without forcing a settings change.
+    const backend = getBackend(this.activeBackendId()) ?? getBackend('placeholder');
     if (!backend) return;
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus || !locus.image_prompt.trim()) return;
@@ -796,6 +821,20 @@ class App {
 
   private setObjectScale(id: string, value: number): void {
     this.mutateLocus(id, (l) => (l.object_scale = value), false);
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private setObjectRotation(id: string, axis: number, value: number): void {
+    this.mutateLocus(
+      id,
+      (l) => {
+        const r: Vec3 = l.object_rotation ?? [0, 0, 0];
+        r[axis] = value;
+        l.object_rotation = r;
+      },
+      false,
+    );
     this.loci.sync(this.palace);
     this.checkpointSoon();
   }
@@ -1166,6 +1205,12 @@ function baseName(fileName: string): string {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+  );
 }
 
 /** Prompt for a single file via a transient <input>. Resolves null if cancelled-ish. */

@@ -143,6 +143,44 @@ canvas {
   opacity: 1;
 }
 
+/* Floating label near the crosshair naming the orb you're aiming at. */
+.tooltip {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -100%);
+  z-index: 9;
+  max-width: 340px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(12, 12, 14, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.tooltip.visible {
+  opacity: 1;
+}
+.tt-title {
+  color: var(--ui-fg);
+  font-weight: 650;
+  font-size: 15px;
+}
+.tt-notes {
+  color: var(--ui-dim);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.tt-door {
+  color: #c9adff;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 .loading {
   color: var(--ui-dim);
   font-size: 14px;

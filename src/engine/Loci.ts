@@ -32,9 +32,12 @@ interface Marker {
   normal: THREE.Vector3;
   /** Whether this locus holds a nested child palace (drives the doorway colour). */
   hasChild?: boolean;
-  /** Local recentre offset + half-size of the loaded mesh, for positioning. */
-  meshCenter?: THREE.Vector3;
-  meshHalf?: number;
+  /** Per-object transform (applies to the image/mesh only, not the orb). */
+  objectScale: number;
+  objectRot: THREE.Vector3; // degrees
+  /** Loaded mesh's box centre + max dimension, for scaling/positioning. */
+  meshRawCenter?: THREE.Vector3;
+  meshMaxDim?: number;
 }
 
 /**
@@ -85,7 +88,12 @@ export class LociLayer {
         marker.label.material.needsUpdate = true;
       }
       marker.hasChild = locus.child_palace != null;
-      marker.group.scale.setScalar(this.markerScale * (locus.object_scale ?? 1));
+      // The orb/number scale with the global marker size only; the attached object
+      // scales/rotates independently (see positionChildren).
+      marker.group.scale.setScalar(this.markerScale);
+      marker.objectScale = locus.object_scale ?? 1;
+      const r = locus.object_rotation ?? [0, 0, 0];
+      marker.objectRot.set(r[0], r[1], r[2]);
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
@@ -118,14 +126,21 @@ export class LociLayer {
    * The group has no rotation, so local axes equal world axes here.
    */
   private positionChildren(marker: Marker): void {
+    const os = marker.objectScale;
     if (marker.image) {
-      marker.image.position.copy(marker.normal).multiplyScalar(0.5);
-      marker.image.position.y += 0.8;
+      marker.image.scale.setScalar(0.9 * os);
+      marker.image.position.copy(marker.normal).multiplyScalar(0.5 * os);
+      marker.image.position.y += 0.8 * os;
     }
-    if (marker.mesh3d && marker.meshCenter) {
-      // recentre the mesh, push it out past the wall by its half-size, lift slightly.
-      marker.mesh3d.position.copy(marker.meshCenter).addScaledVector(marker.normal, (marker.meshHalf ?? 0.4) + 0.15);
-      marker.mesh3d.position.y += 0.3;
+    if (marker.mesh3d && marker.meshRawCenter && marker.meshMaxDim) {
+      // Fit into ~0.8u, times the per-locus object scale.
+      const scale = (0.8 / marker.meshMaxDim) * os;
+      marker.mesh3d.scale.setScalar(scale);
+      marker.mesh3d.rotation.set(deg2rad(marker.objectRot.x), deg2rad(marker.objectRot.y), deg2rad(marker.objectRot.z));
+      const half = (marker.meshMaxDim * scale) / 2;
+      // recentre, then push out past the wall by its half-size and lift slightly.
+      marker.mesh3d.position.copy(marker.meshRawCenter).multiplyScalar(-scale).addScaledVector(marker.normal, half + 0.15);
+      marker.mesh3d.position.y += 0.3 * os;
     }
   }
 
@@ -201,11 +216,10 @@ export class LociLayer {
     box.getSize(size);
     const center = new THREE.Vector3();
     box.getCenter(center);
-    const scale = 0.8 / (Math.max(size.x, size.y, size.z) || 1);
-    obj.scale.setScalar(scale);
-    // Store recentre offset + half-size; positionChildren pushes it off the wall.
-    marker.meshCenter = new THREE.Vector3(-center.x * scale, -center.y * scale, -center.z * scale);
-    marker.meshHalf = (Math.max(size.x, size.y, size.z) * scale) / 2;
+    // Store raw box centre + size; positionChildren computes scale/position/rotation
+    // so a live object-scale/rotation change needs no reload.
+    marker.meshRawCenter = center.clone();
+    marker.meshMaxDim = Math.max(size.x, size.y, size.z) || 1;
 
     marker.group.add(obj);
     marker.mesh3d = obj;
@@ -356,7 +370,16 @@ export class LociLayer {
     group.add(halo, core, label);
     this.group.add(group);
 
-    const marker: Marker = { group, core, halo, label, order: 0, normal: new THREE.Vector3(0, 1, 0) };
+    const marker: Marker = {
+      group,
+      core,
+      halo,
+      label,
+      order: 0,
+      normal: new THREE.Vector3(0, 1, 0),
+      objectScale: 1,
+      objectRot: new THREE.Vector3(0, 0, 0),
+    };
     this.markers.set(locusId, marker);
     return marker;
   }
@@ -388,6 +411,10 @@ export class LociLayer {
     this.labelTextures.set(order, tex);
     return tex;
   }
+}
+
+function deg2rad(d: number): number {
+  return (d * Math.PI) / 180;
 }
 
 /** Free GPU memory for a loaded mesh subtree before we drop it. */

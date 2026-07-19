@@ -36,8 +36,10 @@ export interface Locus {
   notes?: string;
   image_2d: string | null;
   mesh_3d: string | null;
-  /** Per-locus scale for the attached image/mesh marker (1 = default). */
+  /** Per-locus scale for the attached image/mesh (1 = default). Does NOT scale the orb. */
   object_scale?: number;
+  /** Per-locus mesh rotation in degrees [x, y, z] (images are billboards, unaffected). */
+  object_rotation?: Vec3;
   /**
    * A nested palace embedded inline (self-contained). Entering it is a scene
    * transition — a full-size space can live inside a fridge. Non-Euclidean is fine.

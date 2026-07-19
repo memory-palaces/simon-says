@@ -41,6 +41,7 @@ export interface EditorHandlers {
   attachImage(id: string): void;
   attachMesh(id: string): void;
   setObjectScale(id: string, value: number): void;
+  setObjectRotation(id: string, axis: number, value: number): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
   enterChild(id: string): void;
@@ -339,10 +340,9 @@ export class EditorPanel {
     };
     wrap.appendChild(prField.el);
 
-    // Rendering controls only appear when a generation backend is active.
-    if (this.gen.activeId !== NONE_ID) {
-      wrap.appendChild(this.generateControls(locus));
-    }
+    // Generate from the prompt (always available — falls back to the offline
+    // placeholder if no pipeline is chosen for this world).
+    wrap.appendChild(this.generateControls(locus));
 
     // Attach your own image / 3D model (e.g. made elsewhere in fal.ai).
     const attachRow = div('locus-gen-row');
@@ -365,6 +365,26 @@ export class EditorPanel {
       rng.oninput = () => this.handlers.setObjectScale(locus.id, parseFloat(rng.value));
       scaleRow.append(lab, rng);
       wrap.appendChild(scaleRow);
+    }
+
+    // Coarse rotation for a 3D mesh (images are camera-facing billboards, no rotation).
+    if (locus.mesh_3d) {
+      const rot = locus.object_rotation ?? [0, 0, 0];
+      ['Rotate X', 'Rotate Y', 'Rotate Z'].forEach((label, axis) => {
+        const row = div('bright-row');
+        const lab = document.createElement('span');
+        lab.className = 'bright-label';
+        lab.textContent = label;
+        const rng = document.createElement('input');
+        rng.type = 'range';
+        rng.min = '-180';
+        rng.max = '180';
+        rng.step = '5';
+        rng.value = String(rot[axis]);
+        rng.oninput = () => this.handlers.setObjectRotation(locus.id, axis, parseFloat(rng.value));
+        row.append(lab, rng);
+        wrap.appendChild(row);
+      });
     }
 
     // Nested child palace: a whole space you can step into at this locus.
