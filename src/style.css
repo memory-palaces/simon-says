@@ -509,6 +509,81 @@ canvas {
   margin-top: 2px;
 }
 
+/* --- Toasts + activity log -------------------------------------------------- */
+
+.toast-stack {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  cursor: pointer;
+  max-width: 360px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ui-fg);
+  background: var(--ui-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 3px solid var(--ui-dim);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast.info {
+  border-left-color: #6c7bff;
+}
+.toast.success {
+  border-left-color: #7fd18a;
+}
+.toast.error {
+  border-left-color: #ff8a80;
+}
+.toast.leaving {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.log-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.log-row.success {
+  color: #9fe0a8;
+}
+.log-row.error {
+  color: #ffb3ac;
+}
+.log-time {
+  color: var(--ui-dim);
+  font-family: ui-monospace, monospace;
+}
+.log-empty {
+  color: var(--ui-dim);
+  font-size: 13px;
+}
+
 /* --- Settings modal -------------------------------------------------------- */
 
 .settings-modal {

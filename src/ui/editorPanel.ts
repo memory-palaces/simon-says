@@ -18,6 +18,7 @@ export interface EditorHandlers {
   newPalace(): void;
   startReview(): void;
   openSettings(): void;
+  openLog(): void;
   recenter(): void;
   selectLocus(id: string): void;
   updateLabel(id: string, text: string): void;
@@ -142,6 +143,10 @@ export class EditorPanel {
     const gear = button('⚙', '', () => this.handlers.openSettings());
     gear.title = 'Settings (keys, controls)';
     actions.appendChild(gear);
+
+    const log = button('📋', '', () => this.handlers.openLog());
+    log.title = 'Activity log';
+    actions.appendChild(log);
 
     header.appendChild(actions);
     this.root.appendChild(header);

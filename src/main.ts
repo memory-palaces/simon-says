@@ -11,6 +11,7 @@ import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
 import { SettingsDialog } from './ui/settingsDialog';
+import { Toasts } from './ui/toasts';
 import { chooseAction } from './ui/choice';
 import {
   applyStyle,
@@ -51,6 +52,7 @@ class App {
   private readonly overlay = new Overlay(this.mount);
   private readonly editor: EditorPanel;
   private readonly review = new ReviewOverlay(this.mount);
+  private readonly toasts = new Toasts(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
   private readonly settingsDialog = new SettingsDialog(this.mount, {
     setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
@@ -96,6 +98,7 @@ class App {
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
       openSettings: () => this.settingsDialog.open(this.genConfig()),
+      openLog: () => this.toasts.openLog(),
       recenter: () => this.viewer.recenter(),
       selectLocus: (id) => this.select(id),
       // rerender=false: re-rendering the panel on every keystroke would drop input
@@ -201,6 +204,7 @@ class App {
   private async save(): Promise<void> {
     await savePalace(this.palace);
     this.savedClean = true;
+    this.toasts.success(`Saved “${this.palace.name}”`);
   }
 
   /**
@@ -601,19 +605,20 @@ class App {
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus?.image_2d) return;
 
-    this.editor.setNotice('Rendering 3D… this can take a while.');
-    this.renderEditor();
+    // Multiple 3D jobs can run at once, so each gets its own floating toast that
+    // resolves in place — no more missing a sidebar notice while scrolled.
+    const label = snippet(locus.image_prompt || locus.label || `locus ${locus.order}`);
+    const toast = this.toasts.show(`Rendering 3D — ${label}…`, 'info', { sticky: true });
     try {
       const glb = await backend.imageTo3d(locus.image_2d);
       locus.mesh_3d = glb;
-      this.editor.setNotice(null);
       this.loci.sync(this.palace);
       this.checkpoint();
       this.renderEditor();
+      toast.update(`3D ready — ${label}`, 'success');
     } catch (err) {
       console.error(err);
-      this.editor.setNotice(err instanceof Error ? err.message : '3D generation failed.');
-      this.renderEditor();
+      toast.update(`3D failed — ${label}: ${err instanceof Error ? err.message : 'error'}`, 'error');
     }
   }
 
@@ -852,6 +857,12 @@ class App {
 /** "mainfloor.glb" -> "mainfloor" for naming a new palace after its model. */
 function baseName(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, '') || 'Untitled palace';
+}
+
+/** A short label for toasts/logs from a prompt or cue. */
+function snippet(text: string): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  return t.length > 40 ? `${t.slice(0, 40)}…` : t;
 }
 
 new App();
