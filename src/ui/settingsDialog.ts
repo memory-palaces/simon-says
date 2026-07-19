@@ -127,7 +127,8 @@ export class SettingsDialog {
       <span>Run</span><span>Shift</span>
       <span>Jump</span><span>Space</span>
       <span>Fly / no-clip</span><span>F <em>(fly = pass through walls)</em></span>
-      <span>Fly up / down</span><span>Space / C (or Ctrl)</span>
+      <span>Fly up / down</span><span>Space / C</span>
+      <span>Fly ⇄ walk (gravity)</span><span>F</span>
       <span>Drop a locus</span><span>E</span>
       <span>Delete / move locus</span><span>X / G <em>(aim at a marker)</em></span>
       <span>Recenter on floor</span><span>R</span>

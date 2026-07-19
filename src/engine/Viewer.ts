@@ -126,7 +126,6 @@ export class Viewer {
   /** Re-drop the walker into the current model (used by the Recenter action). */
   recenter(): void {
     if (!this.currentModel) return;
-    this.fp.stopFlying(); // if they flew below the floor, get back to walking
     this.spawnInto(this.currentModel, new THREE.Box3().setFromObject(this.currentModel));
   }
 

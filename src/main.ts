@@ -308,6 +308,9 @@ class App {
     const items = lociInOrder(this.palace).map((l) => ({ id: l.id, order: l.order, label: l.label }));
     openGoToDialog(this.mount, items, (id) => {
       this.gotoLocus(id);
+      // Fly in at the pin so you don't immediately drop off an upper floor.
+      this.viewer.fp.setFlying(true);
+      this.enterWalk();
       const l = this.palace.loci.find((x) => x.id === id);
       if (l) this.toasts.info(`Jumped to #${l.order}${l.label ? ` — ${l.label}` : ''}`);
     });

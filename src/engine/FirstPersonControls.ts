@@ -42,7 +42,10 @@ export class FirstPersonControls {
   // Runtime state.
   private velocityY = 0;
   private onGround = false;
-  private flying = false;
+  // Default to flying: the spaces are multi-floor and models often have an
+  // artificial ground plane, so walk-mode gravity drops you off upper floors. Fly
+  // lets you move freely; press F for gravity-walk.
+  private flying = true;
   private readonly keys = new Set<string>();
 
   // Reusable scratch — allocating inside the animation loop causes GC hitches.
@@ -88,9 +91,8 @@ export class FirstPersonControls {
     return this.flying ? 'fly' : 'walk';
   }
 
-  /** Force walk mode (e.g. on Recenter, to recover from flying below the floor). */
-  stopFlying(): void {
-    this.flying = false;
+  setFlying(on: boolean): void {
+    this.flying = on;
     this.velocityY = 0;
   }
 
@@ -128,7 +130,7 @@ export class FirstPersonControls {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) this.moveDir.add(this.right);
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) this.moveDir.sub(this.right);
     if (this.keys.has('Space')) this.moveDir.y += 1;
-    if (this.keys.has('KeyC') || this.keys.has('ControlLeft')) this.moveDir.y -= 1;
+    if (this.keys.has('KeyC')) this.moveDir.y -= 1; // Ctrl is NOT down (frees Ctrl+G etc.)
 
     if (this.moveDir.lengthSq() > 0) {
       this.moveDir.normalize();

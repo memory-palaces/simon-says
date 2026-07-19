@@ -121,7 +121,7 @@ export class EditorPanel {
     header.appendChild(name);
 
     const actions = div('editor-actions');
-    actions.appendChild(button('▶ Walk', 'primary', () => this.handlers.enterWalk()));
+    actions.appendChild(button('▶ Enter', 'primary', () => this.handlers.enterWalk()));
     actions.appendChild(button('Save', '', () => this.handlers.save()));
     actions.appendChild(button('Load', '', () => this.handlers.load()));
     actions.appendChild(button('New', '', () => this.handlers.newPalace()));
@@ -145,8 +145,8 @@ export class EditorPanel {
     gear.title = 'Settings (keys, controls)';
     actions.appendChild(gear);
 
-    const log = button('📋', '', () => this.handlers.openLog());
-    log.title = 'Activity log';
+    const log = button('>_', '', () => this.handlers.openLog());
+    log.title = 'Activity log / console';
     actions.appendChild(log);
 
     header.appendChild(actions);
@@ -160,7 +160,7 @@ export class EditorPanel {
     const hint = div('editor-hint');
     hint.innerHTML =
       palace.loci.length === 0
-        ? 'No loci yet. Press <b>▶ Walk</b>, look at a wall or object, and press <kbd>E</kbd> to drop one.'
+        ? 'No loci yet. Press <b>▶ Enter</b>, look at a wall or object, and press <kbd>E</kbd> to drop one.'
         : 'Click a locus to edit it. In walk mode: <kbd>E</kbd> drop · look at a marker then <kbd>X</kbd> delete / <kbd>G</kbd> move.';
     this.root.appendChild(hint);
 
