@@ -66,7 +66,12 @@ class App {
   /** Session-only history of rendered images per locus, so rerolls aren't lost. */
   private readonly sessionImages = new Map<string, string[]>();
 
+  /** The palace currently being viewed/edited (may be a nested child). */
   private palace: Palace = createEmptyPalace('My palace');
+  /** The top-level palace. Save, autosave and undo history all operate on this. */
+  private root: Palace = this.palace;
+  /** Descent path into nested child palaces, with the camera state to return to. */
+  private navStack: Array<{ locusId: string; camPos: THREE.Vector3; camQuat: THREE.Quaternion; flying: boolean }> = [];
   private mode: Mode = 'edit';
   private selectedId: string | null = null;
   private targetedId: string | null = null;
@@ -128,6 +133,9 @@ class App {
       clearMesh: (id) => this.clearMesh(id),
       setStyle: (id) => this.setStyle(id),
       setFalModel: (model) => this.setFalModel(model),
+      enterChild: (id) => this.enterChild(id),
+      removeChild: (id) => this.removeChild(id),
+      returnToParent: () => this.returnToParent(),
     });
     this.syncGeneration();
 
@@ -155,7 +163,7 @@ class App {
       setAsset(this.palace, DEFAULT_SPACE.url);
       this.viewer.applyEnvironment(this.palace.environment);
       this.loci.sync(this.palace);
-      this.history.reset(this.palace);
+      this.history.reset(this.root);
       this.setMode('edit');
     } catch (err) {
       console.error(err);
@@ -200,12 +208,12 @@ class App {
   private markDirty(): void {
     this.savedClean = false; // there are now changes not written to a file
     clearTimeout(this.draftTimer);
-    this.draftTimer = window.setTimeout(() => saveDraft(this.palace), 400);
+    this.draftTimer = window.setTimeout(() => saveDraft(this.root), 400);
   }
 
   /** Explicit Save to a file; clears the unsaved-changes flag on success. */
   private async save(): Promise<void> {
-    await savePalace(this.palace);
+    await savePalace(this.root);
     this.savedClean = true;
     this.toasts.success(`Saved “${this.palace.name}”`);
   }
@@ -234,7 +242,7 @@ class App {
   /** Write the draft immediately (on tab close / hide, where a timer wouldn't fire). */
   private flushDraft(): void {
     clearTimeout(this.draftTimer);
-    saveDraft(this.palace);
+    saveDraft(this.root);
   }
 
   // --- Undo/redo history -----------------------------------------------------
@@ -243,7 +251,7 @@ class App {
   private checkpoint(): void {
     this.histPending = false;
     clearTimeout(this.histTimer);
-    this.history.push(this.palace);
+    this.history.push(this.root);
     this.markDirty();
     this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
   }
@@ -254,7 +262,7 @@ class App {
     clearTimeout(this.histTimer);
     this.histTimer = window.setTimeout(() => {
       this.histPending = false;
-      this.history.push(this.palace);
+      this.history.push(this.root);
       this.markDirty();
       this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
     }, 700);
@@ -265,7 +273,7 @@ class App {
     if (!this.histPending) return;
     this.histPending = false;
     clearTimeout(this.histTimer);
-    this.history.push(this.palace);
+    this.history.push(this.root);
   }
 
   private undo(): void {
@@ -279,22 +287,31 @@ class App {
     if (snap) this.applySnapshot(snap);
   }
 
-  /** Replace the live palace with a restored snapshot and refresh everything. */
+  /**
+   * Replace the ROOT with a restored snapshot and refresh. Undo/redo snapshot the
+   * whole tree; to keep this simple we surface at the root view (v1 limitation:
+   * undo while inside a nested child returns you to the top level).
+   */
   private applySnapshot(snapshot: Palace): void {
+    const reload = this.navStack.length > 0 || snapshot.assets[0]?.file !== this.viewer.assetFile;
+    this.root = snapshot;
     this.palace = snapshot;
+    this.navStack = [];
     if (this.selectedId && !this.palace.loci.some((l) => l.id === this.selectedId)) this.selectedId = null;
     this.movingId = null;
     this.targetedId = null;
     this.loci.setTargeted(null);
     this.loci.setSelected(this.selectedId);
-    this.loci.sync(this.palace);
     this.viewer.applyEnvironment(this.palace.environment);
-    this.markDirty();
-    if (this.mode === 'edit') {
-      this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
+    if (reload) {
+      void this.enterPalaceGeometry();
     } else {
-      this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
+      this.loci.sync(this.palace);
     }
+    this.markDirty();
+    this.updateReturnUi();
+    if (this.mode === 'edit') this.renderEditor();
+    else this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
   }
 
   /** Ctrl/Cmd+G: jump to a locus by number or name. */
@@ -396,8 +413,11 @@ class App {
     const n = this.palace.loci.length;
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
     if (this.movingId) parts.push('moving — [E] drop');
-    else if (this.targetedId) parts.push('marker — [X] delete  [G] move');
-    else parts.push('[E] drop a locus');
+    else if (this.targetedId) {
+      const hasChild = this.palace.loci.find((l) => l.id === this.targetedId)?.child_palace != null;
+      parts.push(`marker — [X] delete  [G] move${hasChild ? '  [Enter] enter' : ''}`);
+    } else parts.push('[E] drop a locus');
+    if (this.navStack.length > 0) parts.push('[Backspace] return');
     parts.push(this.viewer.fp.mode === 'fly' ? 'fly' : 'walk');
     this.overlay.setHud(parts.join('   ·   '));
   }
@@ -430,6 +450,11 @@ class App {
       else if (e.code === 'KeyG') this.toggleMove();
       else if (e.code === 'KeyR') this.viewer.recenter();
       else if (e.code === 'KeyV') this.toggleXray();
+      else if (e.code === 'Enter' && this.targetedId) {
+        // Only descend into an EXISTING child; creating one stays explicit (panel).
+        const l = this.palace.loci.find((x) => x.id === this.targetedId);
+        if (l?.child_palace) void this.enterChild(this.targetedId);
+      } else if (e.code === 'Backspace') void this.returnToParent();
     } else if (this.mode === 'review') {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
@@ -677,12 +702,14 @@ class App {
     // A fresh palace gets a fresh name (not the previous one's) but keeps the model
     // currently loaded so you can start placing loci right away.
     this.palace = createEmptyPalace();
+    this.root = this.palace;
+    this.navStack = [];
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
     this.editor.setNotice(null); // clear any stale "drag the geometry" message
     this.viewer.applyEnvironment(this.palace.environment);
     this.loci.sync(this.palace);
-    this.history.reset(this.palace);
+    this.history.reset(this.root);
     this.markDirty();
     this.savedClean = true; // a fresh, empty palace has nothing unsaved to lose
     this.renderEditor();
@@ -753,6 +780,101 @@ class App {
     this.viewer.teleportTo(viewPos, pos);
   }
 
+  // --- Nested child palaces --------------------------------------------------
+
+  /** Resolve the palace at the current descent path (root -> child -> …). */
+  private resolveCurrent(): Palace {
+    let p = this.root;
+    for (const frame of this.navStack) {
+      const locus = p.loci.find((l) => l.id === frame.locusId);
+      if (!locus?.child_palace) break;
+      p = locus.child_palace;
+    }
+    return p;
+  }
+
+  /** Load the current palace's geometry into the viewer, or clear it if none. */
+  private async enterPalaceGeometry(): Promise<void> {
+    const asset = this.palace.assets.find((a) => a.id === DEFAULT_ASSET_ID) ?? this.palace.assets[0];
+    const file = asset?.file ?? '';
+    this.viewer.applyEnvironment(this.palace.environment);
+    this.editor.setNotice(null);
+    if (/^(data:|https?:|\.?\/|assets\/)/.test(file)) {
+      try {
+        await this.viewer.loadUrl(file); // mountModel spawns us in
+      } catch {
+        this.editor.setNotice('Could not load this palace’s geometry.');
+      }
+    } else {
+      this.viewer.clearModel();
+      if (this.palace.loci.length === 0) {
+        this.editor.setNotice('Empty inner palace — drag a .glb onto the window to give it a space.');
+      }
+    }
+    this.loci.sync(this.palace);
+    if (this.mode === 'edit') this.renderEditor();
+  }
+
+  /** Descend into a locus's child palace (creating an empty one if needed). */
+  private async enterChild(locusId: string): Promise<void> {
+    const locus = this.palace.loci.find((l) => l.id === locusId);
+    if (!locus) return;
+    if (!locus.child_palace) {
+      locus.child_palace = createEmptyPalace(locus.label || 'Inner space');
+      this.checkpoint();
+    }
+    // Remember the camera so Return drops us back exactly where we were.
+    this.navStack.push({
+      locusId,
+      camPos: this.viewer.camera.position.clone(),
+      camQuat: this.viewer.camera.quaternion.clone(),
+      flying: this.viewer.fp.mode === 'fly',
+    });
+    this.palace = locus.child_palace;
+    this.selectedId = null;
+    await this.enterPalaceGeometry();
+    this.updateReturnUi();
+    this.toasts.info(`Entered “${this.palace.name}” — Backspace to return`);
+  }
+
+  /** Pop back up to the parent palace, restoring its geometry and camera. */
+  private async returnToParent(): Promise<void> {
+    const frame = this.navStack.pop();
+    if (!frame) return;
+    this.palace = this.resolveCurrent();
+    this.selectedId = null;
+    await this.enterPalaceGeometry();
+    this.viewer.fp.setFlying(frame.flying);
+    this.viewer.camera.position.copy(frame.camPos);
+    this.viewer.camera.quaternion.copy(frame.camQuat);
+    this.updateReturnUi();
+  }
+
+  private removeChild(locusId: string): void {
+    const locus = this.palace.loci.find((l) => l.id === locusId);
+    if (!locus) return;
+    locus.child_palace = null;
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  /** Tell the panel how deep we are so it can show a Return / breadcrumb bar. */
+  private updateReturnUi(): void {
+    const trail = [this.root.name, ...this.navStack.map((_, i) => this.paletteNameAt(i + 1))];
+    this.editor.setNesting(this.navStack.length, trail);
+  }
+
+  /** Name of the palace at descent depth `depth` (0 = root). */
+  private paletteNameAt(depth: number): string {
+    let p = this.root;
+    for (let i = 0; i < depth && i < this.navStack.length; i++) {
+      const locus = p.loci.find((l) => l.id === this.navStack[i].locusId);
+      if (!locus?.child_palace) break;
+      p = locus.child_palace;
+    }
+    return p.name;
+  }
+
   // --- Drag & drop / load ----------------------------------------------------
 
   private async onDrop(e: DragEvent): Promise<void> {
@@ -771,6 +893,12 @@ class App {
    * just load it.
    */
   private async onGlbDrop(file: File): Promise<void> {
+    // Inside a nested child, a dropped GLB always sets THIS child's geometry — never
+    // start a new root palace (that would sever the nesting link).
+    if (this.navStack.length > 0) {
+      await this.swapGeometry(file);
+      return;
+    }
     if (this.palace.loci.length === 0) {
       await this.newPalaceWithGeometry(file);
       return;
@@ -819,13 +947,15 @@ class App {
     try {
       const dataUrl = await fileToDataUrl(file);
       this.palace = createEmptyPalace(baseName(file.name));
+      this.root = this.palace;
+      this.navStack = [];
       this.selectedId = null;
       this.viewer.applyEnvironment(this.palace.environment);
       await this.viewer.loadUrl(dataUrl);
       setAsset(this.palace, dataUrl);
       this.editor.setNotice(null);
       this.loci.sync(this.palace);
-      this.history.reset(this.palace);
+      this.history.reset(this.root);
       this.markDirty();
       this.savedClean = true;
       this.finishLoad();
@@ -860,6 +990,8 @@ class App {
   /** Load a palace, then try to bring in its geometry (or ask the user to drop it). */
   private async adoptPalace(palace: Palace): Promise<void> {
     this.palace = palace;
+    this.root = palace;
+    this.navStack = [];
     this.selectedId = null;
     this.viewer.applyEnvironment(this.palace.environment);
     const asset = palace.assets.find((a) => a.id === DEFAULT_ASSET_ID) ?? palace.assets[0];
@@ -880,7 +1012,7 @@ class App {
     }
     this.loci.sync(this.palace);
     this.markDirty(); // autosave the loaded palace as the current draft
-    this.history.reset(this.palace); // loaded file is the new baseline
+    this.history.reset(this.root); // loaded file is the new baseline
     this.savedClean = true; // matches the file on disk; nothing unsaved yet
     this.finishLoad();
   }

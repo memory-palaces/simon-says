@@ -30,6 +30,8 @@ interface Marker {
   mesh3dSrc?: string;
   /** World surface normal at this locus, so the image/mesh sit in front of the wall. */
   normal: THREE.Vector3;
+  /** Whether this locus holds a nested child palace (drives the doorway colour). */
+  hasChild?: boolean;
   /** Local recentre offset + half-size of the loaded mesh, for positioning. */
   meshCenter?: THREE.Vector3;
   meshHalf?: number;
@@ -79,6 +81,7 @@ export class LociLayer {
         marker.label.material.map = this.numberTexture(locus.order);
         marker.label.material.needsUpdate = true;
       }
+      marker.hasChild = locus.child_palace != null;
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
@@ -246,7 +249,8 @@ export class LociLayer {
     for (const [id, marker] of this.markers) {
       const state: MarkerState =
         id === this.selectedId ? 'selected' : id === this.targetedId ? 'targeted' : 'normal';
-      const color = COLORS[state];
+      // A locus with a nested child gets a distinct "doorway" colour when idle.
+      const color = state === 'normal' && marker.hasChild ? 0xb98cff : COLORS[state];
       (marker.core.material as THREE.MeshBasicMaterial).color.setHex(color);
       (marker.halo.material as THREE.SpriteMaterial).color.setHex(color);
       const scale = state === 'normal' ? 1 : 1.35;

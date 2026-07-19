@@ -64,6 +64,10 @@ export class FirstPersonControls {
     window.addEventListener('keyup', this.onKeyUp);
   }
 
+  clearColliders(): void {
+    this.colliders = [];
+  }
+
   /** Point collision at a freshly loaded model and size the ground probe to it. */
   setColliders(root: THREE.Object3D, bounds: THREE.Box3): void {
     this.colliders = [root];

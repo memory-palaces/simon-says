@@ -198,6 +198,17 @@ export class Viewer {
     return this.currentAssetFile;
   }
 
+  /** Remove the current geometry (e.g. entering an empty nested palace). */
+  clearModel(): void {
+    if (this.currentModel) {
+      this.scene.remove(this.currentModel);
+      disposeObject(this.currentModel);
+      this.currentModel = null;
+    }
+    this.currentAssetFile = '';
+    this.fp.clearColliders();
+  }
+
   /** Map an asset id to its live scene object (currently a single-asset app). */
   resolveAsset = (assetId: string): THREE.Object3D | null => {
     return assetId === DEFAULT_ASSET_ID ? this.currentModel : null;

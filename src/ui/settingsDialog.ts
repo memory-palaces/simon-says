@@ -133,6 +133,8 @@ export class SettingsDialog {
       <span>Delete / move locus</span><span>X / G <em>(aim at a marker)</em></span>
       <span>Recenter on floor</span><span>R</span>
       <span>X-ray (all pins through walls)</span><span>V</span>
+      <span>Enter inner palace (aim at doorway pin)</span><span>Enter</span>
+      <span>Return to parent palace</span><span>Backspace</span>
       <span>Open locus editor</span><span>click a marker</span>
       <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
       <span>Go to a locus</span><span>Ctrl/Cmd+G</span>

@@ -34,7 +34,11 @@ export interface Locus {
   image_prompt: string;
   image_2d: string | null;
   mesh_3d: string | null;
-  child_palace: string | null;
+  /**
+   * A nested palace embedded inline (self-contained). Entering it is a scene
+   * transition — a full-size space can live inside a fridge. Non-Euclidean is fine.
+   */
+  child_palace: Palace | null;
   /** ISO timestamp of the last review, or null. Left in the model for v2 SRS. */
   last_reviewed: string | null;
 }

@@ -331,6 +331,24 @@ canvas {
   font-style: normal;
   font-size: 11px;
 }
+.nest-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(185, 140, 255, 0.14);
+  border: 1px solid rgba(185, 140, 255, 0.4);
+}
+.nest-crumb {
+  font-size: 12px;
+  color: #d8c6ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .editor-notice {
   background: rgba(255, 207, 92, 0.14);
   border: 1px solid rgba(255, 207, 92, 0.4);

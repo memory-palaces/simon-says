@@ -37,6 +37,9 @@ export interface EditorHandlers {
   clearMesh(id: string): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
+  enterChild(id: string): void;
+  removeChild(id: string): void;
+  returnToParent(): void;
 }
 
 /**
@@ -56,6 +59,9 @@ export class EditorPanel {
 
   /** A transient banner (e.g. "drop this palace's .glb"). Persists across renders. */
   private notice: string | null = null;
+
+  /** Nesting depth + breadcrumb trail, for the Return bar. */
+  private nesting: { depth: number; trail: string[] } = { depth: 0, trail: [] };
 
   // Kept so history state can be toggled without a full re-render (which would
   // drop focus while the user is mid-edit).
@@ -90,6 +96,10 @@ export class EditorPanel {
     this.notice = text;
   }
 
+  setNesting(depth: number, trail: string[]): void {
+    this.nesting = { depth, trail };
+  }
+
   setGeneration(gen: GenState): void {
     this.gen = gen;
   }
@@ -104,6 +114,16 @@ export class EditorPanel {
     this.rowLabels.clear();
     this.rowPrompts.clear();
     this.root.replaceChildren();
+
+    if (this.nesting.depth > 0) {
+      const bar = div('nest-bar');
+      const crumb = div('nest-crumb');
+      crumb.textContent = this.nesting.trail.join('  ›  ');
+      const back = button('▲ Return', '', () => this.handlers.returnToParent());
+      back.title = 'Return to parent palace (Backspace)';
+      bar.append(crumb, back);
+      this.root.appendChild(bar);
+    }
 
     if (this.notice) {
       const banner = div('editor-notice');
@@ -301,6 +321,16 @@ export class EditorPanel {
     if (this.gen.activeId !== NONE_ID) {
       wrap.appendChild(this.generateControls(locus));
     }
+
+    // Nested child palace: a whole space you can step into at this locus.
+    const childRow = div('locus-gen-row');
+    if (locus.child_palace) {
+      childRow.appendChild(button('↳ Enter inner palace', '', () => this.handlers.enterChild(locus.id)));
+      childRow.appendChild(iconButton('🗑', 'remove inner palace', () => this.handlers.removeChild(locus.id)));
+    } else {
+      childRow.appendChild(button('➕ Add inner palace', '', () => this.handlers.enterChild(locus.id)));
+    }
+    wrap.appendChild(childRow);
 
     return wrap;
   }
