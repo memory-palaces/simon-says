@@ -32,8 +32,12 @@ export interface Locus {
   local_normal: Vec3;
   /** The bizarre mnemonic image — WRITTEN BY THE USER. The AI only ever renders it. */
   image_prompt: string;
+  /** Freeform notes: what this locus represents, how you got here, links — a knowledge repo. */
+  notes?: string;
   image_2d: string | null;
   mesh_3d: string | null;
+  /** Per-locus scale for the attached image/mesh marker (1 = default). */
+  object_scale?: number;
   /**
    * A nested palace embedded inline (self-contained). Entering it is a scene
    * transition — a full-size space can live inside a fridge. Non-Euclidean is fine.

@@ -37,6 +37,10 @@ export interface EditorHandlers {
   generate3d(id: string): void;
   clearMesh(id: string): void;
   mountMeshPreview(container: HTMLElement, glbDataUrl: string): void;
+  updateNotes(id: string, text: string): void;
+  attachImage(id: string): void;
+  attachMesh(id: string): void;
+  setObjectScale(id: string, value: number): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
   enterChild(id: string): void;
@@ -316,7 +320,13 @@ export class EditorPanel {
     };
     wrap.appendChild(lblField.el);
 
-    const prField = field('Your mnemonic image', 'e.g. "a screaming lobster wearing my grandmother\'s reading glasses"', true);
+    const notesField = field('Notes', 'what it represents, how you got here, links…', true);
+    const notes = notesField.input as HTMLTextAreaElement;
+    notes.value = locus.notes ?? '';
+    notes.oninput = () => this.handlers.updateNotes(id, notes.value);
+    wrap.appendChild(notesField.el);
+
+    const prField = field('Image prompt (rendered by the AI)', 'e.g. "a screaming lobster wearing my grandmother\'s reading glasses"', true);
     const pr = prField.input as HTMLTextAreaElement;
     pr.value = locus.image_prompt;
     pr.oninput = () => {
@@ -332,6 +342,29 @@ export class EditorPanel {
     // Rendering controls only appear when a generation backend is active.
     if (this.gen.activeId !== NONE_ID) {
       wrap.appendChild(this.generateControls(locus));
+    }
+
+    // Attach your own image / 3D model (e.g. made elsewhere in fal.ai).
+    const attachRow = div('locus-gen-row');
+    attachRow.appendChild(button('📎 Attach image', '', () => this.handlers.attachImage(locus.id)));
+    attachRow.appendChild(button('📎 Attach 3D', '', () => this.handlers.attachMesh(locus.id)));
+    wrap.appendChild(attachRow);
+
+    // Per-locus object scale (only meaningful once something is attached).
+    if (locus.image_2d || locus.mesh_3d) {
+      const scaleRow = div('bright-row');
+      const lab = document.createElement('span');
+      lab.className = 'bright-label';
+      lab.textContent = 'Object scale';
+      const rng = document.createElement('input');
+      rng.type = 'range';
+      rng.min = '0.2';
+      rng.max = '5';
+      rng.step = '0.1';
+      rng.value = String(locus.object_scale ?? 1);
+      rng.oninput = () => this.handlers.setObjectScale(locus.id, parseFloat(rng.value));
+      scaleRow.append(lab, rng);
+      wrap.appendChild(scaleRow);
     }
 
     // Nested child palace: a whole space you can step into at this locus.

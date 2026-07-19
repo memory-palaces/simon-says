@@ -143,6 +143,13 @@ class App {
       generate3d: (id) => this.generate3dFor(id),
       clearMesh: (id) => this.clearMesh(id),
       mountMeshPreview: (container, url) => this.meshPreview.attach(container, url),
+      updateNotes: (id, text) => {
+        this.mutateLocus(id, (l) => (l.notes = text), false);
+        this.checkpointSoon();
+      },
+      attachImage: (id) => this.attachFile(id, 'image'),
+      attachMesh: (id) => this.attachFile(id, 'mesh'),
+      setObjectScale: (id, v) => this.setObjectScale(id, v),
       setStyle: (id) => this.setStyle(id),
       setFalModel: (model) => this.setFalModel(model),
       enterChild: (id) => this.enterChild(id),
@@ -153,7 +160,7 @@ class App {
     this.syncGeneration();
 
     this.toasts.setTunables([
-      { id: 'marker', label: 'Marker size', min: 0.3, max: 3, step: 0.1, value: 1, onChange: (v) => this.loci.setMarkerScale(v) },
+      { id: 'marker', label: 'Marker size', min: 0.3, max: 3, step: 0.1, value: 1, onChange: (v) => { this.loci.setMarkerScale(v); this.loci.sync(this.palace); } },
       { id: 'glow', label: 'Mesh glow', min: 0, max: 1, step: 0.05, value: 0.45, onChange: (v) => this.loci.setMeshEmissive(v) },
       { id: 'fade', label: 'Fade ms', min: 0, max: 600, step: 20, value: this.fadeMs, onChange: (v) => (this.fadeMs = v) },
     ]);
@@ -465,8 +472,9 @@ class App {
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
     if (this.movingId) parts.push('moving — [E] drop');
     else if (this.targetedId) {
-      const hasChild = this.palace.loci.find((l) => l.id === this.targetedId)?.child_palace != null;
-      parts.push(`marker — [X] delete  [G] move${hasChild ? '  [Enter] enter' : ''}`);
+      const t = this.palace.loci.find((l) => l.id === this.targetedId);
+      const name = t?.label ? `“${t.label}”` : 'marker';
+      parts.push(`${name} — [X] delete  [G] move${t?.child_palace ? '  [Enter] enter' : ''}`);
     } else parts.push('[E] drop a locus');
     if (this.navStack.length > 0) parts.push('[Backspace] return');
     parts.push(this.viewer.fp.mode === 'fly' ? 'fly' : 'walk');
@@ -758,6 +766,38 @@ class App {
     this.loci.sync(this.palace);
     this.checkpoint();
     this.renderEditor();
+  }
+
+  /** Attach a user-supplied image or GLB (e.g. generated elsewhere in fal.ai). */
+  private async attachFile(id: string, kind: 'image' | 'mesh'): Promise<void> {
+    const file = await pickFile(kind === 'image' ? 'image/*' : '.glb,.gltf,model/gltf-binary');
+    if (!file) return;
+    const locus = this.palace.loci.find((l) => l.id === id);
+    if (!locus) return;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      if (kind === 'image') {
+        locus.image_2d = dataUrl;
+        const hist = this.sessionImages.get(id) ?? [];
+        hist.push(dataUrl);
+        this.sessionImages.set(id, hist);
+      } else {
+        locus.mesh_3d = dataUrl;
+      }
+      this.loci.sync(this.palace);
+      this.checkpoint();
+      this.renderEditor();
+      this.toasts.success(kind === 'image' ? 'Image attached' : '3D model attached');
+    } catch (err) {
+      console.error(err);
+      this.toasts.error(`Couldn't attach "${file.name}"`);
+    }
+  }
+
+  private setObjectScale(id: string, value: number): void {
+    this.mutateLocus(id, (l) => (l.object_scale = value), false);
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
   }
 
   private async newPalace(): Promise<void> {
@@ -1126,6 +1166,17 @@ function baseName(fileName: string): string {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Prompt for a single file via a transient <input>. Resolves null if cancelled-ish. */
+function pickFile(accept: string): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.click();
+  });
 }
 
 /** A short label for toasts/logs from a prompt or cue. */

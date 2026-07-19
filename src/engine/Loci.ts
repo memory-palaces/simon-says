@@ -85,7 +85,7 @@ export class LociLayer {
         marker.label.material.needsUpdate = true;
       }
       marker.hasChild = locus.child_palace != null;
-      marker.group.scale.setScalar(this.markerScale);
+      marker.group.scale.setScalar(this.markerScale * (locus.object_scale ?? 1));
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
@@ -217,10 +217,9 @@ export class LociLayer {
     return this.xray;
   }
 
-  /** Debug: scale every marker (sphere/image/mesh/number) uniformly. */
+  /** Debug: global marker scale (combined with each locus's object_scale on sync). */
   setMarkerScale(scale: number): void {
     this.markerScale = scale;
-    for (const marker of this.markers.values()) marker.group.scale.setScalar(scale);
   }
 
   /** Debug: how self-lit generated meshes are (0 = lit only by scene, 1 = glowing). */
