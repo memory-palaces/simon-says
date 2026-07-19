@@ -1,5 +1,12 @@
 import { DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
-import { DEFAULT_LOCAL_URL, DEFAULT_LOCAL_WORKFLOW, NONE_ID, type LocalConfig } from '../model/generation';
+import {
+  DEFAULT_FAL_MODEL,
+  DEFAULT_LOCAL_URL,
+  DEFAULT_LOCAL_WORKFLOW,
+  NONE_ID,
+  type FalConfig,
+  type LocalConfig,
+} from '../model/generation';
 
 /** Everything the panel needs to call back into the app. */
 export interface EditorHandlers {
@@ -23,6 +30,7 @@ export interface EditorHandlers {
   clearImage(id: string): void;
   setLocalConfig(url: string, workflow: string): void;
   testLocal(): void;
+  setFalConfig(apiKey: string, model: string): void;
 }
 
 /**
@@ -49,7 +57,12 @@ export class EditorPanel {
   private redoBtn: HTMLButtonElement | null = null;
 
   /** Active generation backend + the choices, for the picker and per-locus buttons. */
-  private gen: { options: Array<{ id: string; label: string }>; activeId: string; local?: LocalConfig } = {
+  private gen: {
+    options: Array<{ id: string; label: string }>;
+    activeId: string;
+    local?: LocalConfig;
+    fal?: FalConfig;
+  } = {
     options: [{ id: NONE_ID, label: 'None (text only)' }],
     activeId: NONE_ID,
   };
@@ -73,8 +86,12 @@ export class EditorPanel {
     this.notice = text;
   }
 
-  setGeneration(options: Array<{ id: string; label: string }>, activeId: string, local?: LocalConfig): void {
-    this.gen = { options, activeId, local };
+  setGeneration(
+    options: Array<{ id: string; label: string }>,
+    activeId: string,
+    config?: { local?: LocalConfig; fal?: FalConfig },
+  ): void {
+    this.gen = { options, activeId, local: config?.local, fal: config?.fal };
   }
 
   /** Update undo/redo enablement without re-rendering (preserves input focus). */
@@ -326,6 +343,33 @@ export class EditorPanel {
     wrap.appendChild(select);
 
     if (this.gen.activeId === 'local') wrap.appendChild(this.localConfig());
+    if (this.gen.activeId === 'fal') wrap.appendChild(this.falConfig());
+    return wrap;
+  }
+
+  /** fal.ai API key + model, shown when the fal backend is active. */
+  private falConfig(): HTMLElement {
+    const wrap = div('local-config');
+
+    const keyField = field('fal.ai API key', 'paste your key');
+    const key = keyField.input as HTMLInputElement;
+    key.type = 'password';
+    key.value = this.gen.fal?.apiKey ?? '';
+    key.autocomplete = 'off';
+
+    const modelField = field('Model', DEFAULT_FAL_MODEL);
+    const model = modelField.input as HTMLInputElement;
+    model.value = this.gen.fal?.model ?? DEFAULT_FAL_MODEL;
+
+    const save = () => this.handlers.setFalConfig(key.value, model.value);
+    key.oninput = save;
+    model.oninput = save;
+
+    wrap.append(keyField.el, modelField.el);
+    const hint = div('locus-gen-hint');
+    hint.innerHTML =
+      'Get a key at <code>fal.ai/dashboard/keys</code>. It stays in this browser and is sent only to fal.ai. Flux schnell is fast and cheap.';
+    wrap.appendChild(hint);
     return wrap;
   }
 

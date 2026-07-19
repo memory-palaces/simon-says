@@ -19,7 +19,9 @@ import {
   NONE_ID,
   saveGenerationSettings,
   testLocalConnection,
+  type FalConfig,
   type GenerationSettings,
+  type LocalConfig,
 } from './model/generation';
 import {
   addLocus,
@@ -103,8 +105,9 @@ class App {
       clearImage: (id) => this.clearImage(id),
       setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
       testLocal: () => this.testLocal(),
+      setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     });
-    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genSettings.local);
+    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genConfig());
 
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
@@ -439,6 +442,10 @@ class App {
     return [{ id: NONE_ID, label: 'None (text only)' }, ...listBackends().map((b) => ({ id: b.id, label: b.label }))];
   }
 
+  private genConfig(): { local?: LocalConfig; fal?: FalConfig } {
+    return { local: this.genSettings.local, fal: this.genSettings.fal };
+  }
+
   private setBackendId(id: string): void {
     this.genSettings = { ...this.genSettings, backendId: id };
     // Seed default local config the first time the local backend is chosen.
@@ -446,7 +453,7 @@ class App {
       this.genSettings.local = { url: DEFAULT_LOCAL_URL, imageWorkflow: DEFAULT_LOCAL_WORKFLOW };
     }
     saveGenerationSettings(this.genSettings);
-    this.editor.setGeneration(this.backendOptions(), id, this.genSettings.local);
+    this.editor.setGeneration(this.backendOptions(), id, this.genConfig());
     this.renderEditor();
   }
 
@@ -454,6 +461,12 @@ class App {
     this.genSettings = { ...this.genSettings, local: { url, imageWorkflow: workflow } };
     saveGenerationSettings(this.genSettings);
     // No re-render: that would drop focus while typing in the config fields.
+  }
+
+  private setFalConfig(apiKey: string, model: string): void {
+    this.genSettings = { ...this.genSettings, fal: { apiKey, model } };
+    saveGenerationSettings(this.genSettings);
+    // No re-render: keep focus in the key/model fields while typing.
   }
 
   private async testLocal(): Promise<void> {

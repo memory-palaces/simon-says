@@ -193,8 +193,59 @@ interface ComfyImage {
   type?: string;
 }
 
+// --- fal.ai cloud backend (byo-key, browser-friendly, fastest to try) -------
+
+export const DEFAULT_FAL_MODEL = 'fal-ai/flux/schnell';
+
+export interface FalConfig {
+  apiKey: string;
+  model?: string;
+}
+
+/**
+ * Hosted image generation via fal.ai. Chosen because it allows direct browser
+ * calls (CORS) — most image APIs (OpenAI, Replicate) are server-only. The key
+ * lives in localStorage and is sent ONLY to fal.ai, per the spec.
+ */
+export class FalBackend implements GenerationBackend {
+  readonly id = 'fal';
+  readonly label = 'fal.ai (cloud, API key)';
+  readonly offline = false;
+
+  async generateImage(prompt: string, seed: number): Promise<string> {
+    const cfg = loadGenerationSettings().fal;
+    if (!cfg?.apiKey) throw new Error('Enter your fal.ai API key in the Generation panel.');
+    const model = cfg.model?.trim() || DEFAULT_FAL_MODEL;
+    const seedVal = (parseInt(promptHash(prompt), 16) + seed * 100003) % 2147483647;
+
+    const res = await fetch(`https://fal.run/${model}`, {
+      method: 'POST',
+      headers: { Authorization: `Key ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, num_images: 1, image_size: 'square_hd', seed: seedVal }),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const body = (await res.json()) as { detail?: unknown };
+        if (body?.detail) detail = `: ${typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)}`;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`fal.ai error ${res.status}${detail}`);
+    }
+    const data = (await res.json()) as { images?: Array<{ url?: string }> };
+    const url = data.images?.[0]?.url;
+    if (!url) throw new Error('fal.ai returned no image.');
+
+    // Copy into a data URL so the palace keeps the image (fal URLs are temporary).
+    const img = await fetch(url);
+    if (!img.ok) throw new Error('Could not download the generated image from fal.ai.');
+    return blobToDataUrl(await img.blob());
+  }
+}
+
 /** Backends available in this build. `none` is represented by absence (null). */
-const BACKENDS: GenerationBackend[] = [new PlaceholderBackend(), new LocalComfyBackend()];
+const BACKENDS: GenerationBackend[] = [new PlaceholderBackend(), new FalBackend(), new LocalComfyBackend()];
 
 export function listBackends(): GenerationBackend[] {
   return BACKENDS;
@@ -212,6 +263,7 @@ const SETTINGS_KEY = 'mempal:generation:v1';
 export interface GenerationSettings {
   backendId: string;
   local?: LocalConfig;
+  fal?: FalConfig;
 }
 
 export function loadGenerationSettings(): GenerationSettings {
