@@ -1,10 +1,17 @@
 import * as THREE from 'three';
 import { FirstPersonControls } from './FirstPersonControls';
 import { loadGlbFromUrl, loadGlbFromFile, type LoadedModel } from './loadGlb';
+import { DEFAULT_ASSET_ID } from '../model/palace';
+
+/** A surface hit under the crosshair, in world space. */
+export interface SurfaceHit {
+  point: THREE.Vector3;
+  normal: THREE.Vector3;
+}
 
 /**
  * Owns the renderer, scene, camera and the render loop. Everything spatial lives
- * here. Step 1 of the build order: load a GLB and walk it in first person.
+ * here: geometry, first-person movement, and the raycasts the editor needs.
  */
 export class Viewer {
   readonly scene = new THREE.Scene();
@@ -13,8 +20,15 @@ export class Viewer {
   readonly fp: FirstPersonControls;
 
   private currentModel: THREE.Group | null = null;
+  private currentAssetFile = '';
   private readonly clock = new THREE.Clock();
   private raf = 0;
+  private readonly frameCallbacks: Array<(dt: number) => void> = [];
+
+  // Reusable scratch for the crosshair raycast.
+  private readonly pickRay = new THREE.Raycaster();
+  private readonly camDir = new THREE.Vector3();
+  private readonly normalMat = new THREE.Matrix3();
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -98,11 +112,52 @@ export class Viewer {
   }
 
   async loadUrl(url: string): Promise<void> {
+    this.currentAssetFile = url;
     this.mountModel(await loadGlbFromUrl(url));
   }
 
   async loadFile(file: File): Promise<void> {
+    // A dropped file has no stable path; remember its name so a saved palace can
+    // ask the user to re-drop it on load.
+    this.currentAssetFile = file.name;
     this.mountModel(await loadGlbFromFile(file));
+  }
+
+  get assetFile(): string {
+    return this.currentAssetFile;
+  }
+
+  /** Map an asset id to its live scene object (currently a single-asset app). */
+  resolveAsset = (assetId: string): THREE.Object3D | null => {
+    return assetId === DEFAULT_ASSET_ID ? this.currentModel : null;
+  };
+
+  /** Raycast forward from the crosshair (screen centre) onto the geometry. */
+  raycastSurface(): SurfaceHit | null {
+    if (!this.currentModel) return null;
+    this.camera.getWorldDirection(this.camDir);
+    this.pickRay.set(this.camera.position, this.camDir);
+    const hits = this.pickRay.intersectObject(this.currentModel, true);
+    if (hits.length === 0) return null;
+    const hit = hits[0];
+    const normal = new THREE.Vector3(0, 1, 0);
+    if (hit.face) {
+      // Face normals are object-local; bring them to world space via the normal matrix.
+      this.normalMat.getNormalMatrix(hit.object.matrixWorld);
+      normal.copy(hit.face.normal).applyNormalMatrix(this.normalMat).normalize();
+    }
+    return { point: hit.point.clone(), normal };
+  }
+
+  /** Point the camera at a target from a given position (used by review mode). */
+  teleportTo(position: THREE.Vector3, lookAt: THREE.Vector3): void {
+    this.fp.teleport(position);
+    this.camera.lookAt(lookAt);
+  }
+
+  /** Run a callback every rendered frame (e.g. the editor updating its crosshair target). */
+  onFrame(cb: (dt: number) => void): void {
+    this.frameCallbacks.push(cb);
   }
 
   start(): void {
@@ -112,6 +167,7 @@ export class Viewer {
       // Clamp dt so a background tab that pauses rAF doesn't teleport us on return.
       const dt = Math.min(this.clock.getDelta(), 0.05);
       this.fp.update(dt);
+      for (const cb of this.frameCallbacks) cb(dt);
       this.renderer.render(this.scene, this.camera);
     };
     tick();
