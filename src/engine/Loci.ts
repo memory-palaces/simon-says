@@ -28,6 +28,11 @@ interface Marker {
   /** Generated 3D mesh placed at the locus; supersedes the flat image. */
   mesh3d?: THREE.Object3D;
   mesh3dSrc?: string;
+  /** World surface normal at this locus, so the image/mesh sit in front of the wall. */
+  normal: THREE.Vector3;
+  /** Local recentre offset + half-size of the loaded mesh, for positioning. */
+  meshCenter?: THREE.Vector3;
+  meshHalf?: number;
 }
 
 /**
@@ -74,6 +79,7 @@ export class LociLayer {
       }
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
+      this.positionChildren(marker);
     }
     // Drop markers whose loci are gone.
     for (const [id, marker] of this.markers) {
@@ -93,6 +99,24 @@ export class LociLayer {
     this.n.transformDirection(root.matrixWorld).normalize();
     // Nudge the marker just off the surface so it doesn't z-fight the wall/floor.
     marker.group.position.copy(this.v).addScaledVector(this.n, 0.06);
+    marker.normal.copy(this.n);
+  }
+
+  /**
+   * Place the image and mesh in FRONT of the surface (along the normal) so a
+   * wall-mounted locus's content sits inside the room, not straddling the wall.
+   * The group has no rotation, so local axes equal world axes here.
+   */
+  private positionChildren(marker: Marker): void {
+    if (marker.image) {
+      marker.image.position.copy(marker.normal).multiplyScalar(0.5);
+      marker.image.position.y += 0.8;
+    }
+    if (marker.mesh3d && marker.meshCenter) {
+      // recentre the mesh, push it out past the wall by its half-size, lift slightly.
+      marker.mesh3d.position.copy(marker.meshCenter).addScaledVector(marker.normal, (marker.meshHalf ?? 0.4) + 0.15);
+      marker.mesh3d.position.y += 0.3;
+    }
   }
 
   /** Show (or hide) the generated 2D image as a billboard above the marker. */
@@ -108,8 +132,7 @@ export class LociLayer {
           new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }),
         );
         marker.image.scale.setScalar(0.9);
-        marker.image.position.y = 1.0;
-        marker.image.renderOrder = 10;
+        marker.image.renderOrder = 10; // position is set by positionChildren
         marker.group.add(marker.image);
       } else {
         const mat = marker.image.material as THREE.SpriteMaterial;
@@ -170,10 +193,13 @@ export class LociLayer {
     box.getCenter(center);
     const scale = 0.8 / (Math.max(size.x, size.y, size.z) || 1);
     obj.scale.setScalar(scale);
-    obj.position.set(-center.x * scale, 0.6 - center.y * scale, -center.z * scale);
+    // Store recentre offset + half-size; positionChildren pushes it off the wall.
+    marker.meshCenter = new THREE.Vector3(-center.x * scale, -center.y * scale, -center.z * scale);
+    marker.meshHalf = (Math.max(size.x, size.y, size.z) * scale) / 2;
 
     marker.group.add(obj);
     marker.mesh3d = obj;
+    this.positionChildren(marker);
     if (marker.image) marker.image.visible = false; // the 3D object supersedes the flat image
   }
 
@@ -274,7 +300,7 @@ export class LociLayer {
     group.add(halo, core, label);
     this.group.add(group);
 
-    const marker: Marker = { group, core, halo, label, order: 0 };
+    const marker: Marker = { group, core, halo, label, order: 0, normal: new THREE.Vector3(0, 1, 0) };
     this.markers.set(locusId, marker);
     return marker;
   }
