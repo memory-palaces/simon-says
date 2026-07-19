@@ -1,0 +1,23 @@
+{
+  "name": "memory-palace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first web app for building and reviewing memory palaces (method of loci).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "fetch-samples": "bash scripts/fetch-samples.sh"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.169.0",
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  }
+}

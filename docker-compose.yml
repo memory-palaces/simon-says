@@ -1,0 +1,18 @@
+# The zero-local-tooling path. With Docker installed:
+#
+#   docker compose up
+#
+# then open http://localhost:5173. No Node, no npm, nothing else on your machine.
+services:
+  mempal:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      # Live-edit source from the host with hot reload...
+      - ./:/app
+      # ...but keep the container's own node_modules (don't clobber with host's).
+      - /app/node_modules
+    # Vite needs file-watch polling to see host edits from inside the container.
+    environment:
+      - CHOKIDAR_USEPOLLING=true
