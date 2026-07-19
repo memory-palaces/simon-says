@@ -88,8 +88,113 @@ export class PlaceholderBackend implements GenerationBackend {
   }
 }
 
+// --- Local ComfyUI backend (the flagship local-GPU path) --------------------
+
+export const DEFAULT_LOCAL_URL = 'http://127.0.0.1:8188';
+
+/**
+ * A minimal ComfyUI API-format text-to-image workflow. The user edits this to
+ * match a checkpoint they actually have. Two placeholders are substituted at
+ * render time: {PROMPT} (their words, JSON-escaped) and {SEED} (an integer).
+ */
+export const DEFAULT_LOCAL_WORKFLOW = JSON.stringify(
+  {
+    '3': { class_type: 'KSampler', inputs: { seed: '{SEED}', steps: 20, cfg: 7, sampler_name: 'euler', scheduler: 'normal', denoise: 1, model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
+    '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'v1-5-pruned-emaonly.safetensors' } },
+    '5': { class_type: 'EmptyLatentImage', inputs: { width: 512, height: 512, batch_size: 1 } },
+    '6': { class_type: 'CLIPTextEncode', inputs: { text: '{PROMPT}', clip: ['4', 1] } },
+    '7': { class_type: 'CLIPTextEncode', inputs: { text: 'blurry, text, watermark', clip: ['4', 1] } },
+    '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'mempal', images: ['8', 0] } },
+  },
+  null,
+  2,
+).replace('"{SEED}"', '{SEED}'); // seed is a number field, not a string
+
+export interface LocalConfig {
+  url: string;
+  imageWorkflow: string;
+}
+
+/** Ping a ComfyUI server; throws with a helpful message if unreachable. */
+export async function testLocalConnection(url: string): Promise<void> {
+  const base = url.replace(/\/+$/, '');
+  let res: Response;
+  try {
+    res = await fetch(`${base}/system_stats`);
+  } catch {
+    throw new Error('Could not reach ComfyUI. Is it running, and started with CORS enabled (--enable-cors-header "*")?');
+  }
+  if (!res.ok) throw new Error(`ComfyUI responded ${res.status}.`);
+}
+
+export class LocalComfyBackend implements GenerationBackend {
+  readonly id = 'local';
+  readonly label = 'Local ComfyUI (localhost)';
+  readonly offline = false;
+
+  async generateImage(prompt: string, seed: number): Promise<string> {
+    const cfg = loadGenerationSettings().local;
+    if (!cfg?.url) throw new Error('Set your ComfyUI URL in the Generation panel.');
+    if (!cfg.imageWorkflow?.trim()) throw new Error('Paste a ComfyUI API-format workflow (keep {PROMPT}).');
+    const base = cfg.url.replace(/\/+$/, '');
+
+    // Vary the seed by prompt + reroll so rerolls differ but stay reproducible.
+    const seedVal = (parseInt(promptHash(prompt), 16) + seed * 100003) % 2147483647;
+    const text = cfg.imageWorkflow.replaceAll('{PROMPT}', escapeJsonString(prompt)).replaceAll('{SEED}', String(seedVal));
+
+    let workflow: unknown;
+    try {
+      workflow = JSON.parse(text);
+    } catch {
+      throw new Error('Workflow is not valid JSON after inserting the prompt.');
+    }
+
+    const submit = await fetch(`${base}/prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: workflow, client_id: `mempal-${promptHash(prompt)}${seed}` }),
+    });
+    if (!submit.ok) {
+      throw new Error(`ComfyUI rejected the workflow (${submit.status}). Check the checkpoint name and node graph.`);
+    }
+    const { prompt_id: promptId } = (await submit.json()) as { prompt_id: string };
+    return this.waitForImage(base, promptId);
+  }
+
+  private async waitForImage(base: string, promptId: string): Promise<string> {
+    // Poll history until the run produces an image (or we give up after ~3 min).
+    for (let i = 0; i < 180; i++) {
+      await sleep(1000);
+      const res = await fetch(`${base}/history/${promptId}`);
+      if (!res.ok) continue;
+      const history = (await res.json()) as Record<string, { outputs?: Record<string, { images?: ComfyImage[] }> }>;
+      const outputs = history[promptId]?.outputs;
+      if (!outputs) continue;
+      for (const nodeId of Object.keys(outputs)) {
+        const images = outputs[nodeId].images;
+        if (images && images.length > 0) return this.fetchImage(base, images[0]);
+      }
+    }
+    throw new Error('Timed out waiting for ComfyUI to finish rendering.');
+  }
+
+  private async fetchImage(base: string, image: ComfyImage): Promise<string> {
+    const query = new URLSearchParams({ filename: image.filename, subfolder: image.subfolder ?? '', type: image.type ?? 'output' });
+    const res = await fetch(`${base}/view?${query.toString()}`);
+    if (!res.ok) throw new Error('Rendered, but could not download the image from ComfyUI.');
+    return blobToDataUrl(await res.blob());
+  }
+}
+
+interface ComfyImage {
+  filename: string;
+  subfolder?: string;
+  type?: string;
+}
+
 /** Backends available in this build. `none` is represented by absence (null). */
-const BACKENDS: GenerationBackend[] = [new PlaceholderBackend()];
+const BACKENDS: GenerationBackend[] = [new PlaceholderBackend(), new LocalComfyBackend()];
 
 export function listBackends(): GenerationBackend[] {
   return BACKENDS;
@@ -106,6 +211,7 @@ const SETTINGS_KEY = 'mempal:generation:v1';
 
 export interface GenerationSettings {
   backendId: string;
+  local?: LocalConfig;
 }
 
 export function loadGenerationSettings(): GenerationSettings {
@@ -124,6 +230,25 @@ export function saveGenerationSettings(settings: GenerationSettings): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Escape a string for safe insertion into a JSON string literal (drops the quotes). */
+function escapeJsonString(s: string): string {
+  const json = JSON.stringify(s);
+  return json.slice(1, -1);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 /** Word-wrap helper for the placeholder caption. */

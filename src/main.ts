@@ -11,11 +11,14 @@ import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
 import { chooseAction } from './ui/choice';
 import {
+  DEFAULT_LOCAL_URL,
+  DEFAULT_LOCAL_WORKFLOW,
   getBackend,
   listBackends,
   loadGenerationSettings,
   NONE_ID,
   saveGenerationSettings,
+  testLocalConnection,
   type GenerationSettings,
 } from './model/generation';
 import {
@@ -98,8 +101,10 @@ class App {
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
       clearImage: (id) => this.clearImage(id),
+      setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
+      testLocal: () => this.testLocal(),
     });
-    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId);
+    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genSettings.local);
 
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
@@ -435,9 +440,30 @@ class App {
   }
 
   private setBackendId(id: string): void {
-    this.genSettings = { backendId: id };
+    this.genSettings = { ...this.genSettings, backendId: id };
+    // Seed default local config the first time the local backend is chosen.
+    if (id === 'local' && !this.genSettings.local) {
+      this.genSettings.local = { url: DEFAULT_LOCAL_URL, imageWorkflow: DEFAULT_LOCAL_WORKFLOW };
+    }
     saveGenerationSettings(this.genSettings);
-    this.editor.setGeneration(this.backendOptions(), id);
+    this.editor.setGeneration(this.backendOptions(), id, this.genSettings.local);
+    this.renderEditor();
+  }
+
+  private setLocalConfig(url: string, workflow: string): void {
+    this.genSettings = { ...this.genSettings, local: { url, imageWorkflow: workflow } };
+    saveGenerationSettings(this.genSettings);
+    // No re-render: that would drop focus while typing in the config fields.
+  }
+
+  private async testLocal(): Promise<void> {
+    const url = this.genSettings.local?.url ?? DEFAULT_LOCAL_URL;
+    try {
+      await testLocalConnection(url);
+      this.editor.setNotice(`ComfyUI reachable at ${url} ✓`);
+    } catch (err) {
+      this.editor.setNotice(err instanceof Error ? err.message : 'Connection failed.');
+    }
     this.renderEditor();
   }
 

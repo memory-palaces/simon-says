@@ -1,5 +1,5 @@
 import { DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
-import { NONE_ID } from '../model/generation';
+import { DEFAULT_LOCAL_URL, DEFAULT_LOCAL_WORKFLOW, NONE_ID, type LocalConfig } from '../model/generation';
 
 /** Everything the panel needs to call back into the app. */
 export interface EditorHandlers {
@@ -21,6 +21,8 @@ export interface EditorHandlers {
   setBackendId(id: string): void;
   generate(id: string): void;
   clearImage(id: string): void;
+  setLocalConfig(url: string, workflow: string): void;
+  testLocal(): void;
 }
 
 /**
@@ -47,7 +49,7 @@ export class EditorPanel {
   private redoBtn: HTMLButtonElement | null = null;
 
   /** Active generation backend + the choices, for the picker and per-locus buttons. */
-  private gen: { options: Array<{ id: string; label: string }>; activeId: string } = {
+  private gen: { options: Array<{ id: string; label: string }>; activeId: string; local?: LocalConfig } = {
     options: [{ id: NONE_ID, label: 'None (text only)' }],
     activeId: NONE_ID,
   };
@@ -71,8 +73,8 @@ export class EditorPanel {
     this.notice = text;
   }
 
-  setGeneration(options: Array<{ id: string; label: string }>, activeId: string): void {
-    this.gen = { options, activeId };
+  setGeneration(options: Array<{ id: string; label: string }>, activeId: string, local?: LocalConfig): void {
+    this.gen = { options, activeId, local };
   }
 
   /** Update undo/redo enablement without re-rendering (preserves input focus). */
@@ -322,6 +324,39 @@ export class EditorPanel {
     }
     select.onchange = () => this.handlers.setBackendId(select.value);
     wrap.appendChild(select);
+
+    if (this.gen.activeId === 'local') wrap.appendChild(this.localConfig());
+    return wrap;
+  }
+
+  /** ComfyUI URL + workflow + a connection test, shown when the local backend is active. */
+  private localConfig(): HTMLElement {
+    const wrap = div('local-config');
+
+    const urlField = field('ComfyUI URL', DEFAULT_LOCAL_URL);
+    const url = urlField.input as HTMLInputElement;
+    url.value = this.gen.local?.url ?? DEFAULT_LOCAL_URL;
+
+    const wfField = field('Workflow (ComfyUI API format — keep {PROMPT} and {SEED})', '');
+    const wf = wfField.input as HTMLTextAreaElement;
+    wf.value = this.gen.local?.imageWorkflow ?? DEFAULT_LOCAL_WORKFLOW;
+    wf.rows = 6;
+    wf.spellcheck = false;
+
+    const save = () => this.handlers.setLocalConfig(url.value, wf.value);
+    url.oninput = save;
+    wf.oninput = save;
+
+    wrap.append(urlField.el, wfField.el);
+
+    const row = div('local-config-row');
+    row.appendChild(button('Test connection', '', () => this.handlers.testLocal()));
+    wrap.appendChild(row);
+
+    const hint = div('locus-gen-hint');
+    hint.innerHTML =
+      'Start ComfyUI with CORS enabled (<code>--enable-cors-header "*"</code>). Edit the workflow so <code>ckpt_name</code> matches a checkpoint you have.';
+    wrap.appendChild(hint);
     return wrap;
   }
 }

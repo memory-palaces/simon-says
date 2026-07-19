@@ -526,6 +526,31 @@ canvas {
   font-family: inherit;
 }
 
+.local-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+}
+.local-config textarea {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.local-config-row {
+  display: flex;
+  gap: 8px;
+}
+.local-config code {
+  font-family: ui-monospace, monospace;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
 .locus-gen {
   display: flex;
   flex-direction: column;
