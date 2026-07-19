@@ -21,7 +21,7 @@ interface LogEntry {
 export class Toasts {
   private readonly stack: HTMLElement;
   private readonly log: LogEntry[] = [];
-  private logModal: HTMLElement | null = null;
+  private drawer: HTMLElement | null = null;
 
   constructor(private readonly mount: HTMLElement) {
     this.stack = document.createElement('div');
@@ -79,54 +79,51 @@ export class Toasts {
     // Local wall-clock time; harmless here (this is the browser app, not a workflow).
     const now = new Date();
     const stamp = now.toTimeString().slice(0, 8);
-    this.log.push({ message, type, stamp });
-    if (this.log.length > 200) this.log.shift();
-    if (this.logModal) this.renderLog();
+    const entry: LogEntry = { message, type, stamp };
+    this.log.push(entry);
+    if (this.log.length > 400) this.log.shift();
+    if (this.drawer) this.appendRow(entry, true);
   }
 
-  /** Open a modal listing the activity log (newest first). */
+  /** Toggle a docked, non-blocking console drawer at the bottom (devtools-style). */
   openLog(): void {
-    if (this.logModal) return;
-    const root = document.createElement('div');
-    root.className = 'settings-modal';
-    root.onclick = (e) => {
-      if (e.target === root) this.closeLog();
-    };
-    const card = document.createElement('div');
-    card.className = 'settings-card';
-    card.innerHTML = `
-      <div class="settings-header">
-        <div class="settings-title">Activity log</div>
-        <button class="icon-btn log-close" title="Close">✕</button>
+    if (this.drawer) {
+      this.closeLog();
+      return;
+    }
+    const drawer = document.createElement('div');
+    drawer.className = 'console-drawer';
+    drawer.innerHTML = `
+      <div class="console-head">
+        <span class="console-title">Console</span>
+        <button class="icon-btn console-close" title="Close">✕</button>
       </div>
-      <div class="log-list"></div>`;
-    (card.querySelector('.log-close') as HTMLButtonElement).onclick = () => this.closeLog();
-    root.appendChild(card);
-    this.mount.appendChild(root);
-    this.logModal = root;
-    this.renderLog();
+      <div class="console-list"></div>`;
+    (drawer.querySelector('.console-close') as HTMLButtonElement).onclick = () => this.closeLog();
+    this.mount.appendChild(drawer);
+    this.drawer = drawer;
+    for (const entry of this.log) this.appendRow(entry, false);
+    this.scrollLog();
   }
 
   private closeLog(): void {
-    this.logModal?.remove();
-    this.logModal = null;
+    this.drawer?.remove();
+    this.drawer = null;
   }
 
-  private renderLog(): void {
-    const list = this.logModal?.querySelector('.log-list');
+  private appendRow(entry: LogEntry, autoscroll: boolean): void {
+    const list = this.drawer?.querySelector('.console-list');
     if (!list) return;
-    if (this.log.length === 0) {
-      list.innerHTML = '<div class="log-empty">Nothing yet.</div>';
-      return;
-    }
-    list.replaceChildren(
-      ...[...this.log].reverse().map((e) => {
-        const row = document.createElement('div');
-        row.className = `log-row ${e.type}`;
-        row.innerHTML = `<span class="log-time">${e.stamp}</span><span>${escapeHtml(e.message)}</span>`;
-        return row;
-      }),
-    );
+    const row = document.createElement('div');
+    row.className = `log-row ${entry.type}`;
+    row.innerHTML = `<span class="log-time">${entry.stamp}</span><span>${escapeHtml(entry.message)}</span>`;
+    list.appendChild(row);
+    if (autoscroll) this.scrollLog();
+  }
+
+  private scrollLog(): void {
+    const list = this.drawer?.querySelector('.console-list');
+    if (list) list.scrollTop = list.scrollHeight;
   }
 }
 
