@@ -36,6 +36,7 @@ export interface EditorHandlers {
   clearImage(id: string): void;
   generate3d(id: string): void;
   clearMesh(id: string): void;
+  mountMeshPreview(container: HTMLElement, glbDataUrl: string): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
   enterChild(id: string): void;
@@ -391,6 +392,13 @@ export class EditorPanel {
         row.appendChild(iconButton('🗑', 'remove 3D', () => this.handlers.clearMesh(locus.id)));
       }
       wrap.appendChild(row);
+
+      // Orbit preview of the generated mesh.
+      if (locus.mesh_3d) {
+        const preview = div('mesh-preview');
+        wrap.appendChild(preview);
+        this.handlers.mountMeshPreview(preview, locus.mesh_3d);
+      }
     }
     return wrap;
   }

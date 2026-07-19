@@ -13,6 +13,7 @@ import { GenerateDialog } from './ui/generateDialog';
 import { SettingsDialog } from './ui/settingsDialog';
 import { Toasts } from './ui/toasts';
 import { openGoToDialog } from './ui/goToDialog';
+import { MeshPreview } from './ui/meshPreview';
 import { chooseAction } from './ui/choice';
 import {
   applyStyle,
@@ -56,6 +57,7 @@ class App {
   private readonly review = new ReviewOverlay(this.mount);
   private readonly toasts = new Toasts(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
+  private readonly meshPreview = new MeshPreview();
   private readonly settingsDialog = new SettingsDialog(this.mount, {
     setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
@@ -140,6 +142,7 @@ class App {
       clearImage: (id) => this.clearImage(id),
       generate3d: (id) => this.generate3dFor(id),
       clearMesh: (id) => this.clearMesh(id),
+      mountMeshPreview: (container, url) => this.meshPreview.attach(container, url),
       setStyle: (id) => this.setStyle(id),
       setFalModel: (model) => this.setFalModel(model),
       enterChild: (id) => this.enterChild(id),
