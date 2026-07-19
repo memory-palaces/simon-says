@@ -53,6 +53,9 @@ export class LociLayer {
   private targetedId: string | null = null;
   /** When true, markers draw through walls (see every pin regardless of room). */
   private xray = false;
+  // Debug-tunable look.
+  private markerScale = 1;
+  private meshEmissive = 0.45;
 
   // Scratch to avoid per-frame allocation.
   private readonly v = new THREE.Vector3();
@@ -82,6 +85,7 @@ export class LociLayer {
         marker.label.material.needsUpdate = true;
       }
       marker.hasChild = locus.child_palace != null;
+      marker.group.scale.setScalar(this.markerScale);
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
@@ -185,7 +189,7 @@ export class LociLayer {
           if (m instanceof THREE.MeshStandardMaterial) {
             if (m.map) m.emissiveMap = m.map;
             m.emissive = new THREE.Color(0xffffff);
-            m.emissiveIntensity = 0.45;
+            m.emissiveIntensity = this.meshEmissive;
             m.needsUpdate = true;
           }
         }
@@ -211,6 +215,27 @@ export class LociLayer {
 
   get xrayOn(): boolean {
     return this.xray;
+  }
+
+  /** Debug: scale every marker (sphere/image/mesh/number) uniformly. */
+  setMarkerScale(scale: number): void {
+    this.markerScale = scale;
+    for (const marker of this.markers.values()) marker.group.scale.setScalar(scale);
+  }
+
+  /** Debug: how self-lit generated meshes are (0 = lit only by scene, 1 = glowing). */
+  setMeshEmissive(value: number): void {
+    this.meshEmissive = value;
+    for (const marker of this.markers.values()) {
+      marker.mesh3d?.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) {
+            if (m instanceof THREE.MeshStandardMaterial) m.emissiveIntensity = value;
+          }
+        }
+      });
+    }
   }
 
   /** Toggle whether markers are occluded by walls (off) or drawn through them (on). */

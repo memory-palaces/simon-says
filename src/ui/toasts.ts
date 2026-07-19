@@ -18,10 +18,22 @@ interface LogEntry {
   stamp: string;
 }
 
+/** A live number knob shown in the console drawer for advanced tweaks. */
+export interface Tunable {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange(value: number): void;
+}
+
 export class Toasts {
   private readonly stack: HTMLElement;
   private readonly log: LogEntry[] = [];
   private drawer: HTMLElement | null = null;
+  private tunables: Tunable[] = [];
 
   constructor(private readonly mount: HTMLElement) {
     this.stack = document.createElement('div');
@@ -98,12 +110,51 @@ export class Toasts {
         <span class="console-title">Console</span>
         <button class="icon-btn console-close" title="Close">✕</button>
       </div>
+      <div class="console-tunables"></div>
       <div class="console-list"></div>`;
     (drawer.querySelector('.console-close') as HTMLButtonElement).onclick = () => this.closeLog();
     this.mount.appendChild(drawer);
     this.drawer = drawer;
+    this.renderTunables();
     for (const entry of this.log) this.appendRow(entry, false);
     this.scrollLog();
+  }
+
+  /** Register the live tunables shown at the top of the console drawer. */
+  setTunables(tunables: Tunable[]): void {
+    this.tunables = tunables;
+    if (this.drawer) this.renderTunables();
+  }
+
+  private renderTunables(): void {
+    const host = this.drawer?.querySelector('.console-tunables');
+    if (!host) return;
+    host.replaceChildren(
+      ...this.tunables.map((t) => {
+        const row = document.createElement('label');
+        row.className = 'tunable';
+        const name = document.createElement('span');
+        name.className = 'tunable-name';
+        name.textContent = t.label;
+        const val = document.createElement('span');
+        val.className = 'tunable-val';
+        val.textContent = t.value.toFixed(2);
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = String(t.min);
+        input.max = String(t.max);
+        input.step = String(t.step);
+        input.value = String(t.value);
+        input.oninput = () => {
+          const v = parseFloat(input.value);
+          t.value = v;
+          val.textContent = v.toFixed(2);
+          t.onChange(v);
+        };
+        row.append(name, input, val);
+        return row;
+      }),
+    );
   }
 
   private closeLog(): void {

@@ -97,6 +97,7 @@ class App {
 
   /** Full-screen fade used to mask scene swaps (entering/leaving a child palace). */
   private readonly fadeEl = document.createElement('div');
+  private fadeMs = 180; // tunable via the console
 
   constructor() {
     this.fadeEl.className = 'fade';
@@ -146,6 +147,12 @@ class App {
       returnToParent: () => this.returnToParent(),
     });
     this.syncGeneration();
+
+    this.toasts.setTunables([
+      { id: 'marker', label: 'Marker size', min: 0.3, max: 3, step: 0.1, value: 1, onChange: (v) => this.loci.setMarkerScale(v) },
+      { id: 'glow', label: 'Mesh glow', min: 0, max: 1, step: 0.05, value: 0.45, onChange: (v) => this.loci.setMeshEmissive(v) },
+      { id: 'fade', label: 'Fade ms', min: 0, max: 600, step: 20, value: this.fadeMs, onChange: (v) => (this.fadeMs = v) },
+    ]);
 
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
@@ -842,11 +849,11 @@ class App {
 
   /** Fade to black, run the scene swap, fade back — like stepping through a door. */
   private async transition(swap: () => Promise<void>): Promise<void> {
+    this.fadeEl.style.transitionDuration = `${this.fadeMs}ms`;
     this.fadeEl.classList.add('on');
-    await wait(180);
+    await wait(this.fadeMs);
     await swap();
-    // Let the new scene render a frame before fading back in.
-    await wait(60);
+    await wait(60); // let the new scene render a frame before fading back in
     this.fadeEl.classList.remove('on');
   }
 

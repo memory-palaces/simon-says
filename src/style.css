@@ -690,6 +690,33 @@ canvas {
   color: var(--ui-dim);
   text-transform: uppercase;
 }
+.console-tunables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.tunable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ui-dim);
+}
+.tunable-name {
+  min-width: 76px;
+}
+.tunable input[type='range'] {
+  width: 110px;
+  accent-color: var(--ui-accent);
+}
+.tunable-val {
+  min-width: 34px;
+  color: var(--ui-fg);
+}
+
 .console-list {
   flex: 1;
   overflow-y: auto;
