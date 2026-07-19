@@ -1,11 +1,15 @@
 /**
- * The generate → preview → approve/reroll modal. The prompt is shown read-only:
- * this dialog renders the user's words, it never offers to change them. The caller
- * supplies a `generate(seed)` function (the active backend) and receives the
- * approved image; the dialog owns the reroll seed and the busy state.
+ * The generate → preview → approve/reroll modal, with session history. AI image
+ * gen is famous for "you'll never see that iteration again", so every render is
+ * kept in a variants list you can page through (◀ ▶); Reroll appends a new one.
+ * The prompt is shown read-only — this dialog renders the user's words, never
+ * edits them.
  */
 export interface GenerateHandlers {
+  /** Existing images for this locus (session history), oldest first. Mutated in place. */
+  variants: string[];
   generate(seed: number): Promise<string>;
+  onGenerated(dataUrl: string): void;
   onApprove(dataUrl: string): void;
 }
 
@@ -13,12 +17,15 @@ export class GenerateDialog {
   private readonly root: HTMLElement;
   private readonly promptEl: HTMLElement;
   private readonly stage: HTMLElement;
+  private readonly counter: HTMLElement;
+  private readonly prevBtn: HTMLButtonElement;
+  private readonly nextBtn: HTMLButtonElement;
   private readonly rerollBtn: HTMLButtonElement;
   private readonly approveBtn: HTMLButtonElement;
 
   private handlers: GenerateHandlers | null = null;
+  private index = -1;
   private seed = 0;
-  private current: string | null = null;
   private busy = false;
 
   constructor(mount: HTMLElement) {
@@ -29,6 +36,11 @@ export class GenerateDialog {
         <div class="gen-title">Render your mnemonic image</div>
         <div class="gen-prompt"></div>
         <div class="gen-stage"></div>
+        <div class="gen-nav">
+          <button class="btn gen-prev">◀</button>
+          <span class="gen-counter"></span>
+          <button class="btn gen-next">▶</button>
+        </div>
         <div class="gen-actions">
           <button class="btn gen-reroll">↻ Reroll</button>
           <button class="btn gen-cancel">Cancel</button>
@@ -39,9 +51,14 @@ export class GenerateDialog {
 
     this.promptEl = this.root.querySelector('.gen-prompt')!;
     this.stage = this.root.querySelector('.gen-stage')!;
+    this.counter = this.root.querySelector('.gen-counter')!;
+    this.prevBtn = this.root.querySelector('.gen-prev')!;
+    this.nextBtn = this.root.querySelector('.gen-next')!;
     this.rerollBtn = this.root.querySelector('.gen-reroll')!;
     this.approveBtn = this.root.querySelector('.gen-approve')!;
 
+    this.prevBtn.onclick = () => this.step(-1);
+    this.nextBtn.onclick = () => this.step(1);
     this.rerollBtn.onclick = () => this.run(this.seed + 1);
     this.approveBtn.onclick = () => this.approve();
     (this.root.querySelector('.gen-cancel') as HTMLButtonElement).onclick = () => this.close();
@@ -54,44 +71,72 @@ export class GenerateDialog {
   open(prompt: string, handlers: GenerateHandlers): void {
     this.handlers = handlers;
     this.promptEl.textContent = `“${prompt}”`;
-    this.seed = 0;
-    this.current = null;
+    this.seed = handlers.variants.length;
     this.root.style.display = 'flex';
-    this.run(0);
+    if (handlers.variants.length > 0) {
+      this.index = handlers.variants.length - 1; // show the most recent
+      this.showCurrent();
+    } else {
+      this.run(0); // nothing yet — render one
+    }
+  }
+
+  private get variants(): string[] {
+    return this.handlers?.variants ?? [];
   }
 
   private async run(seed: number): Promise<void> {
     if (!this.handlers || this.busy) return;
     this.seed = seed;
     this.busy = true;
-    this.setButtons();
     this.stage.innerHTML = '<div class="gen-loading">Rendering…</div>';
+    this.setButtons();
     try {
       const dataUrl = await this.handlers.generate(seed);
-      this.current = dataUrl;
-      const img = document.createElement('img');
-      img.className = 'gen-image';
-      img.src = dataUrl;
-      this.stage.replaceChildren(img);
+      this.handlers.onGenerated(dataUrl); // append to session history
+      this.index = this.variants.length - 1;
+      this.showCurrent();
     } catch (err) {
       console.error(err);
-      this.current = null;
-      this.stage.innerHTML = '<div class="gen-error">Generation failed. Check the backend and try again.</div>';
+      this.stage.innerHTML = '<div class="gen-error">Generation failed. Check the pipeline in Settings and try again.</div>';
     } finally {
       this.busy = false;
       this.setButtons();
     }
   }
 
+  private step(delta: number): void {
+    const next = this.index + delta;
+    if (next < 0 || next >= this.variants.length) return;
+    this.index = next;
+    this.showCurrent();
+  }
+
+  private showCurrent(): void {
+    const src = this.variants[this.index];
+    if (src) {
+      const img = document.createElement('img');
+      img.className = 'gen-image';
+      img.src = src;
+      this.stage.replaceChildren(img);
+    }
+    this.setButtons();
+  }
+
   private approve(): void {
-    if (!this.current || !this.handlers) return;
-    this.handlers.onApprove(this.current);
+    const src = this.variants[this.index];
+    if (!src || !this.handlers) return;
+    this.handlers.onApprove(src);
     this.close();
   }
 
   private setButtons(): void {
+    const total = this.variants.length;
+    this.counter.textContent = total > 0 ? `${this.index + 1} / ${total}` : '';
+    this.prevBtn.disabled = this.busy || this.index <= 0;
+    this.nextBtn.disabled = this.busy || this.index >= total - 1;
     this.rerollBtn.disabled = this.busy;
-    this.approveBtn.disabled = this.busy || !this.current;
+    this.approveBtn.disabled = this.busy || total === 0;
   }
 
   private close(): void {

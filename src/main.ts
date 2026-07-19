@@ -57,6 +57,8 @@ class App {
   });
 
   private genSettings: GenerationSettings = loadGenerationSettings();
+  /** Session-only history of rendered images per locus, so rerolls aren't lost. */
+  private readonly sessionImages = new Map<string, string[]>();
 
   private palace: Palace = createEmptyPalace('My palace');
   private mode: Mode = 'edit';
@@ -534,8 +536,17 @@ class App {
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus || !locus.image_prompt.trim()) return;
 
+    // Seed the dialog's history with this session's variants (or the saved image).
+    let history = this.sessionImages.get(id);
+    if (!history) {
+      history = locus.image_2d ? [locus.image_2d] : [];
+      this.sessionImages.set(id, history);
+    }
+
     this.generateDialog.open(locus.image_prompt, {
+      variants: history,
       generate: (seed) => backend.generateImage(locus.image_prompt, seed),
+      onGenerated: (dataUrl) => history.push(dataUrl),
       onApprove: (dataUrl) => {
         locus.image_2d = dataUrl;
         this.loci.sync(this.palace);

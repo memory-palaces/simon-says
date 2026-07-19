@@ -698,11 +698,25 @@ canvas {
 .gen-error {
   color: #ff8a80;
 }
+.gen-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.gen-counter {
+  color: var(--ui-dim);
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  min-width: 48px;
+  text-align: center;
+}
 .gen-actions {
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 /* --- Review overlay -------------------------------------------------------- */
