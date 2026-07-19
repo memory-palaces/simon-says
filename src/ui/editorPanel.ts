@@ -29,6 +29,7 @@ export class EditorPanel {
   // Live references so typing in the detail fields doesn't force a full re-render
   // (which would drop focus). Structural changes call render() explicitly.
   private rowLabels = new Map<string, HTMLElement>();
+  private rowPrompts = new Map<string, HTMLElement>();
 
   /** A transient banner (e.g. "drop this palace's .glb"). Persists across renders. */
   private notice: string | null = null;
@@ -54,6 +55,7 @@ export class EditorPanel {
 
   render(palace: Palace, selectedId: string | null): void {
     this.rowLabels.clear();
+    this.rowPrompts.clear();
     this.root.replaceChildren();
 
     if (this.notice) {
@@ -81,6 +83,10 @@ export class EditorPanel {
     actions.appendChild(review);
     header.appendChild(actions);
     this.root.appendChild(header);
+
+    const autosave = div('editor-autosave');
+    autosave.textContent = '✓ Autosaves to this browser as you work · Save exports a .json backup';
+    this.root.appendChild(autosave);
 
     // --- How-to hint -----------------------------------------------------------
     const hint = div('editor-hint');
@@ -111,6 +117,7 @@ export class EditorPanel {
       text.onclick = () => this.handlers.selectLocus(locus.id);
       row.appendChild(text);
       this.rowLabels.set(locus.id, labelEl);
+      this.rowPrompts.set(locus.id, promptEl);
 
       const ctrls = div('locus-ctrls');
       ctrls.appendChild(iconButton('▲', 'move up', () => this.handlers.reorder(locus.id, -1)));
@@ -154,7 +161,14 @@ export class EditorPanel {
     const prField = field('Your mnemonic image', 'e.g. "a screaming lobster wearing my grandmother\'s reading glasses"', true);
     const pr = prField.input as HTMLTextAreaElement;
     pr.value = prompt;
-    pr.oninput = () => this.handlers.updatePrompt(id, pr.value);
+    pr.oninput = () => {
+      this.handlers.updatePrompt(id, pr.value);
+      const row = this.rowPrompts.get(id);
+      if (row) {
+        row.textContent = pr.value || 'no mnemonic yet';
+        row.classList.toggle('empty', !pr.value);
+      }
+    };
     wrap.appendChild(prField.el);
 
     return wrap;

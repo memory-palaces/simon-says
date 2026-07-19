@@ -6,6 +6,7 @@ import { Overlay } from './ui/overlay';
 import { EditorPanel } from './ui/editorPanel';
 import { ReviewOverlay } from './ui/review';
 import { openPalace, readPalaceFile, savePalace } from './model/persistence';
+import { loadDraft, saveDraft } from './model/autosave';
 import {
   addLocus,
   createEmptyPalace,
@@ -45,17 +46,24 @@ class App {
   private readonly scratchA = new THREE.Vector3();
   private readonly scratchB = new THREE.Vector3();
 
+  private draftTimer = 0;
+
   constructor() {
     this.editor = new EditorPanel(this.mount, {
-      renamePalace: (name) => (this.palace.name = name),
+      renamePalace: (name) => {
+        this.palace.name = name;
+        this.markDirty();
+      },
       enterWalk: () => this.enterWalk(),
       save: () => savePalace(this.palace),
       load: () => this.loadViaPicker(),
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
       selectLocus: (id) => this.select(id),
-      updateLabel: (id, text) => this.mutateLocus(id, (l) => (l.label = text)),
-      updatePrompt: (id, text) => this.mutateLocus(id, (l) => (l.image_prompt = text)),
+      // rerender=false: re-rendering the panel on every keystroke would drop input
+      // focus. The panel updates the affected row text in place instead.
+      updateLabel: (id, text) => this.mutateLocus(id, (l) => (l.label = text), false),
+      updatePrompt: (id, text) => this.mutateLocus(id, (l) => (l.image_prompt = text), false),
       reorder: (id, dir) => this.reorder(id, dir),
       deleteLocus: (id) => this.deleteLocus(id),
       teleport: (id) => this.gotoLocus(id),
@@ -68,6 +76,14 @@ class App {
   }
 
   private async boot(): Promise<void> {
+    // Restore an autosaved draft if one exists — never make the user start over
+    // because of a refresh or crash.
+    const draft = loadDraft();
+    if (draft) {
+      await this.adoptPalace(draft);
+      return;
+    }
+
     this.overlay.showLoading(DEFAULT_SPACE.name);
     try {
       await this.viewer.loadUrl(DEFAULT_SPACE.url);
@@ -113,15 +129,40 @@ class App {
     if (!this.viewer.fp.locked) this.viewer.fp.lock();
   }
 
+  /** Queue a debounced autosave. Called after every change to the palace. */
+  private markDirty(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = window.setTimeout(() => saveDraft(this.palace), 400);
+  }
+
+  /** Write the draft immediately (on tab close / hide, where a timer wouldn't fire). */
+  private flushDraft(): void {
+    clearTimeout(this.draftTimer);
+    saveDraft(this.palace);
+  }
+
+  /** Select the marker under the crosshair and drop back to the editor for it. */
+  private openTargetedInEditor(): void {
+    if (!this.targetedId) return;
+    this.selectedId = this.targetedId;
+    this.loci.setSelected(this.selectedId);
+    // Unlocking fires the 'unlock' handler -> setMode('edit'), which renders the
+    // panel with this locus selected and its detail fields open.
+    if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
+    else this.setMode('edit');
+  }
+
   private wireEvents(): void {
     this.viewer.fp.controls.addEventListener('lock', () => this.setMode('walk'));
     this.viewer.fp.controls.addEventListener('unlock', () => {
       if (this.mode === 'walk') this.setMode('edit');
     });
 
-    // Click the 3D view (not the panel) to start walking.
+    // Click the 3D view to start walking; while walking, click a marker you're
+    // looking at to jump straight to its editor.
     this.viewer.renderer.domElement.addEventListener('click', () => {
       if (this.mode === 'edit') this.enterWalk();
+      else if (this.mode === 'walk' && this.targetedId && !this.movingId) this.openTargetedInEditor();
     });
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
@@ -130,6 +171,13 @@ class App {
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     });
     window.addEventListener('drop', (e) => this.onDrop(e));
+
+    // Belt-and-suspenders autosave: flush the draft when the tab is hidden or
+    // closed, in case the debounce timer hasn't fired yet.
+    window.addEventListener('beforeunload', () => this.flushDraft());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.flushDraft();
+    });
   }
 
   // --- Per-frame: crosshair targeting + move + HUD ---------------------------
@@ -201,6 +249,7 @@ class App {
     const locus = addLocus(this.palace, local.position, local.normal);
     this.selectedId = locus.id;
     this.loci.sync(this.palace);
+    this.markDirty();
   }
 
   private deleteTargeted(): void {
@@ -212,6 +261,7 @@ class App {
     removeLocus(this.palace, id);
     this.loci.setTargeted(null);
     this.loci.sync(this.palace);
+    this.markDirty();
   }
 
   private toggleMove(): void {
@@ -235,12 +285,14 @@ class App {
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus) return;
     fn(locus);
+    this.markDirty();
     if (rerender && this.mode === 'edit') this.editor.render(this.palace, this.selectedId);
   }
 
   private reorder(id: string, dir: -1 | 1): void {
     reorderLocus(this.palace, id, dir);
     this.loci.sync(this.palace);
+    this.markDirty();
     this.editor.render(this.palace, this.selectedId);
   }
 
@@ -248,16 +300,18 @@ class App {
     if (this.selectedId === id) this.selectedId = null;
     removeLocus(this.palace, id);
     this.loci.sync(this.palace);
+    this.markDirty();
     this.editor.render(this.palace, this.selectedId);
   }
 
   private newPalace(): void {
-    if (this.palace.loci.length > 0 && !confirm('Start a new palace? Unsaved loci will be lost.')) return;
+    if (this.palace.loci.length > 0 && !confirm('Start a new palace? This clears the current draft. Use Save first to keep it.')) return;
     const name = this.palace.name;
     this.palace = createEmptyPalace(name);
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
     this.loci.sync(this.palace);
+    this.markDirty();
     this.editor.render(this.palace, this.selectedId);
   }
 
@@ -288,6 +342,7 @@ class App {
     if (!this.reviewRevealed) {
       this.reviewRevealed = true;
       locus.last_reviewed = new Date().toISOString();
+      this.markDirty();
       const isLast = this.reviewIndex === this.reviewRoute.length - 1;
       this.review.showReveal(this.reviewIndex + 1, this.reviewRoute.length, locus.label, locus.image_prompt, isLast);
       return;
@@ -344,6 +399,7 @@ class App {
       setAsset(this.palace, file.name);
       this.editor.setNotice(null); // geometry is present now
       this.loci.sync(this.palace);
+      this.markDirty();
       this.finishLoad();
     } catch (err) {
       console.error(err);
@@ -391,6 +447,7 @@ class App {
       this.editor.setNotice(`Palace "${palace.name}" loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);
     }
     this.loci.sync(this.palace);
+    this.markDirty();
     this.finishLoad();
   }
 
