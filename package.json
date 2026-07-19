@@ -5,18 +5,22 @@
   "description": "A local-first web app for building and reviewing memory palaces (method of loci).",
   "license": "MIT",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "fetch-samples": "bash scripts/fetch-samples.sh"
+    "fetch-samples": "bash scripts/fetch-samples.sh",
+    "electron": "npm run build && electron .",
+    "electron:dev": "MEMPAL_DEV_URL=http://localhost:5173 electron ."
   },
   "dependencies": {
     "three": "0.169.0"
   },
   "devDependencies": {
     "@types/three": "0.169.0",
+    "electron": "33.0.2",
     "typescript": "5.6.3",
     "vite": "5.4.10"
   }

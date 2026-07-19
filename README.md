@@ -40,6 +40,14 @@ To build static files you can serve anywhere:
 npm run build          # outputs dist/
 ```
 
+**Desktop app (Electron):** for a native window — and, importantly, **real
+save-to-file on any OS** (the File System Access API only works in Chromium; Electron
+bundles it, so Firefox/Safari users get proper Ctrl+S here):
+```bash
+npm run electron       # builds, then opens the app in a native window
+npm run electron:dev   # dev: run `npm run dev` first, then this points at :5173
+```
+
 ---
 
 ## Using it
