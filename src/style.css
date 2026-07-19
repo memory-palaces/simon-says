@@ -445,6 +445,70 @@ canvas {
   border-color: var(--ui-accent);
 }
 
+/* --- Choice modal ---------------------------------------------------------- */
+
+.choice-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+.choice-card {
+  background: var(--ui-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 22px;
+  width: min(420px, 92vw);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+.choice-title {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--ui-fg);
+}
+.choice-msg {
+  margin-top: 6px;
+  color: var(--ui-dim);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.choice-btn {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ui-fg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.choice-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.choice-btn.primary {
+  border-color: var(--ui-accent);
+  background: rgba(255, 207, 92, 0.12);
+}
+.choice-btn-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.choice-btn-sub {
+  font-size: 12px;
+  color: var(--ui-dim);
+  margin-top: 2px;
+}
+
 /* --- Generation ------------------------------------------------------------ */
 
 .editor-gen {

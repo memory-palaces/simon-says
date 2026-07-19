@@ -9,6 +9,7 @@ import { openPalace, readPalaceFile, savePalace } from './model/persistence';
 import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
+import { chooseAction } from './ui/choice';
 import {
   getBackend,
   listBackends,
@@ -550,20 +551,71 @@ class App {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    if (/\.(glb|gltf)$/i.test(file.name)) await this.loadGeometry(file);
+    if (/\.(glb|gltf)$/i.test(file.name)) await this.onGlbDrop(file);
     else if (/\.json$/i.test(file.name)) await this.loadPalaceFile(file);
     else this.overlay.showError(`"${file.name}" isn't a .glb, .gltf, or .json file.`);
   }
 
-  /** Swap the geometry but KEEP the loci — asset-local coords make them survive. */
-  private async loadGeometry(file: File): Promise<void> {
+  /**
+   * Dropping a GLB usually means "try a different space", not "update the same
+   * one" — so when loci already exist we ask, rather than silently keeping loci
+   * over a completely different model. With no loci there's nothing to lose, so we
+   * just load it.
+   */
+  private async onGlbDrop(file: File): Promise<void> {
+    if (this.palace.loci.length === 0) {
+      await this.newPalaceWithGeometry(file);
+      return;
+    }
+    const n = this.palace.loci.length;
+    const choice = await chooseAction(this.mount, {
+      title: `Load “${file.name}”`,
+      message: `You have ${n} ${n === 1 ? 'locus' : 'loci'} in “${this.palace.name}”. This is probably a different space.`,
+      choices: [
+        { id: 'new', label: 'Start a new palace with this model', sublabel: 'Discards the current loci', variant: 'primary' },
+        { id: 'save-new', label: 'Save current, then start new', sublabel: 'Exports a .json first' },
+        { id: 'replace', label: 'Keep my loci, just swap the model', sublabel: 'For an updated version of the same space' },
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    });
+
+    if (choice === 'replace') await this.swapGeometry(file);
+    else if (choice === 'new') await this.newPalaceWithGeometry(file);
+    else if (choice === 'save-new') {
+      await savePalace(this.palace);
+      await this.newPalaceWithGeometry(file);
+    }
+  }
+
+  /** Swap geometry but KEEP the loci — asset-local coords make them survive. */
+  private async swapGeometry(file: File): Promise<void> {
     this.overlay.showLoading(file.name);
     try {
       await this.viewer.loadFile(file);
       setAsset(this.palace, file.name);
-      this.editor.setNotice(null); // geometry is present now
+      this.editor.setNotice(null);
       this.loci.sync(this.palace);
       this.checkpoint();
+      this.finishLoad();
+    } catch (err) {
+      console.error(err);
+      this.overlay.showError(`Couldn't load "${file.name}". It may reference external textures a single file can't include.`);
+    }
+  }
+
+  /** Start a fresh palace built on the dropped model. */
+  private async newPalaceWithGeometry(file: File): Promise<void> {
+    this.overlay.showLoading(file.name);
+    try {
+      this.palace = createEmptyPalace(baseName(file.name));
+      this.selectedId = null;
+      this.viewer.applyEnvironment(this.palace.environment);
+      await this.viewer.loadFile(file);
+      setAsset(this.palace, file.name);
+      this.editor.setNotice(null);
+      this.loci.sync(this.palace);
+      this.history.reset(this.palace);
+      this.markDirty();
       this.finishLoad();
     } catch (err) {
       console.error(err);
@@ -625,6 +677,11 @@ class App {
     if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
     this.setMode('edit');
   }
+}
+
+/** "mainfloor.glb" -> "mainfloor" for naming a new palace after its model. */
+function baseName(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '') || 'Untitled palace';
 }
 
 new App();
