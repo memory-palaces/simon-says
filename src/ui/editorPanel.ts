@@ -10,6 +10,7 @@ export interface EditorHandlers {
   newPalace(): void;
   startReview(): void;
   openSettings(): void;
+  recenter(): void;
   selectLocus(id: string): void;
   updateLabel(id: string, text: string): void;
   updatePrompt(id: string, text: string): void;
@@ -110,6 +111,10 @@ export class EditorPanel {
     const review = button('Review ▸', '', () => this.handlers.startReview());
     review.disabled = palace.loci.length === 0;
     actions.appendChild(review);
+
+    const recenter = button('⌖ Recenter', '', () => this.handlers.recenter());
+    recenter.title = 'Drop back onto the floor (R)';
+    actions.appendChild(recenter);
 
     this.undoBtn = button('↶', '', () => this.handlers.undo());
     this.undoBtn.title = 'Undo (Ctrl/Cmd+Z)';

@@ -88,6 +88,12 @@ export class FirstPersonControls {
     return this.flying ? 'fly' : 'walk';
   }
 
+  /** Force walk mode (e.g. on Recenter, to recover from flying below the floor). */
+  stopFlying(): void {
+    this.flying = false;
+    this.velocityY = 0;
+  }
+
   get locked(): boolean {
     return this.controls.isLocked;
   }

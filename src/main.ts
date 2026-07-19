@@ -92,6 +92,7 @@ class App {
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
       openSettings: () => this.settingsDialog.open(this.genConfig()),
+      recenter: () => this.viewer.recenter(),
       selectLocus: (id) => this.select(id),
       // rerender=false: re-rendering the panel on every keystroke would drop input
       // focus. The panel updates the affected row text in place instead. History is
@@ -382,6 +383,7 @@ class App {
       if (e.code === 'KeyE') this.dropOrPlace();
       else if (e.code === 'KeyX') this.deleteTargeted();
       else if (e.code === 'KeyG') this.toggleMove();
+      else if (e.code === 'KeyR') this.viewer.recenter();
     } else if (this.mode === 'review') {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();

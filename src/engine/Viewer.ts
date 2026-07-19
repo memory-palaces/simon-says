@@ -101,8 +101,18 @@ export class Viewer {
    * with nothing under the middle), we frame the whole model from outside instead
    * of stranding the camera in empty space staring at the void.
    */
+  /** Re-drop the walker into the current model (used by the Recenter action). */
+  recenter(): void {
+    if (!this.currentModel) return;
+    this.fp.stopFlying(); // if they flew below the floor, get back to walking
+    this.spawnInto(this.currentModel, new THREE.Box3().setFromObject(this.currentModel));
+  }
+
   private spawnInside(model: LoadedModel): void {
-    const b = model.bounds;
+    this.spawnInto(model.scene, model.bounds);
+  }
+
+  private spawnInto(root: THREE.Object3D, b: THREE.Box3): void {
     const center = new THREE.Vector3();
     b.getCenter(center);
     const size = new THREE.Vector3();
@@ -117,7 +127,7 @@ export class Viewer {
     ];
 
     for (const [x, z] of columns) {
-      const floorY = this.floorAt(model.scene, x, z, b.max.y + 1);
+      const floorY = this.floorAt(root, x, z, b.max.y + 1);
       if (floorY === null) continue;
       const pos = new THREE.Vector3(x, floorY + this.fp.eyeOffset, z);
       // Face the model's centre (kept horizontal) so there's geometry in view.

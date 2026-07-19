@@ -130,6 +130,7 @@ export class SettingsDialog {
       <span>Fly up / down</span><span>Space / C (or Ctrl)</span>
       <span>Drop a locus</span><span>E</span>
       <span>Delete / move locus</span><span>X / G <em>(aim at a marker)</em></span>
+      <span>Recenter on floor</span><span>R</span>
       <span>Open locus editor</span><span>click a marker</span>
       <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
       <span>Back to editor</span><span>Esc</span>`;
