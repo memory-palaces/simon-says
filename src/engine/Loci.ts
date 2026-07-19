@@ -49,6 +49,8 @@ export class LociLayer {
 
   private selectedId: string | null = null;
   private targetedId: string | null = null;
+  /** When true, markers draw through walls (see every pin regardless of room). */
+  private xray = false;
 
   // Scratch to avoid per-frame allocation.
   private readonly v = new THREE.Vector3();
@@ -80,6 +82,7 @@ export class LociLayer {
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
+      this.applyXray(marker);
     }
     // Drop markers whose loci are gone.
     for (const [id, marker] of this.markers) {
@@ -129,7 +132,7 @@ export class LociLayer {
         marker.image = new THREE.Sprite(
           // depthTest off + a high renderOrder: draw the image as an always-visible
           // label so a nearby wall/floor can't clip the camera-facing quad.
-          new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }),
+          new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }),
         );
         marker.image.scale.setScalar(0.9);
         marker.image.renderOrder = 10; // position is set by positionChildren
@@ -201,6 +204,31 @@ export class LociLayer {
     marker.mesh3d = obj;
     this.positionChildren(marker);
     if (marker.image) marker.image.visible = false; // the 3D object supersedes the flat image
+  }
+
+  get xrayOn(): boolean {
+    return this.xray;
+  }
+
+  /** Toggle whether markers are occluded by walls (off) or drawn through them (on). */
+  setXray(on: boolean): void {
+    this.xray = on;
+    for (const marker of this.markers.values()) this.applyXray(marker);
+  }
+
+  /**
+   * Default: markers depth-test against the world, so you only see pins in your
+   * current room. X-ray: draw them on top of everything to locate every pin. The
+   * generated 3D mesh always stays depth-tested (it's a real object in the space).
+   */
+  private applyXray(marker: Marker): void {
+    const sprites = [marker.core, marker.halo, marker.label, marker.image];
+    const order = this.xray ? 10 : 0;
+    for (const s of sprites) {
+      if (!s) continue;
+      (s.material as THREE.Material).depthTest = !this.xray;
+      s.renderOrder = order;
+    }
   }
 
   setSelected(id: string | null): void {
@@ -292,7 +320,7 @@ export class LociLayer {
 
     // Floating number so the route order is legible in-world.
     const label = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: this.numberTexture(0), transparent: true, depthWrite: false, depthTest: false, toneMapped: false }),
+      new THREE.SpriteMaterial({ map: this.numberTexture(0), transparent: true, depthWrite: false, toneMapped: false }),
     );
     label.scale.setScalar(0.4);
     label.position.y = 0.28;

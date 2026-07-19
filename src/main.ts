@@ -296,6 +296,12 @@ class App {
     }
   }
 
+  private toggleXray(): void {
+    const on = !this.loci.xrayOn;
+    this.loci.setXray(on);
+    this.toasts.info(on ? 'X-ray on — all pins show through walls' : 'X-ray off — pins hidden behind walls');
+  }
+
   /** Select the marker under the crosshair and drop back to the editor for it. */
   private openTargetedInEditor(): void {
     if (!this.targetedId) return;
@@ -398,6 +404,7 @@ class App {
       else if (e.code === 'KeyX') this.deleteTargeted();
       else if (e.code === 'KeyG') this.toggleMove();
       else if (e.code === 'KeyR') this.viewer.recenter();
+      else if (e.code === 'KeyV') this.toggleXray();
     } else if (this.mode === 'review') {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
