@@ -1,4 +1,4 @@
-import { lociInOrder, type Palace } from '../model/palace';
+import { DEFAULT_BACKGROUND, lociInOrder, type Palace } from '../model/palace';
 
 /** Everything the panel needs to call back into the app. */
 export interface EditorHandlers {
@@ -16,6 +16,7 @@ export interface EditorHandlers {
   teleport(id: string): void;
   undo(): void;
   redo(): void;
+  setBackground(hex: string): void;
 }
 
 /**
@@ -157,6 +158,9 @@ export class EditorPanel {
     }
     this.root.appendChild(list);
 
+    // --- World background ------------------------------------------------------
+    this.root.appendChild(this.worldSection(palace));
+
     // --- Controls reference ----------------------------------------------------
     const controls = div('editor-controls');
     controls.innerHTML = `
@@ -180,6 +184,44 @@ export class EditorPanel {
     note.innerHTML =
       'Write the mnemonic image yourself — the weirder the better. This tool renders your idea; it never invents one for you.';
     this.root.appendChild(note);
+  }
+
+  /** Background colour picker + preset swatches; changes apply live and are undoable. */
+  private worldSection(palace: Palace): HTMLElement {
+    const wrap = div('editor-world');
+    const title = div('ctrl-title');
+    title.textContent = 'World background';
+    wrap.appendChild(title);
+
+    const row = div('world-row');
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.className = 'world-color';
+    color.value = palace.environment?.background ?? DEFAULT_BACKGROUND;
+    color.oninput = () => this.handlers.setBackground(color.value);
+    row.appendChild(color);
+
+    const presets: Array<[string, string]> = [
+      ['Slate', DEFAULT_BACKGROUND],
+      ['Abyss', '#0a0a0b'],
+      ['Sky', '#9fb8d6'],
+      ['Dusk', '#3a2f4a'],
+      ['Warm', '#2a2320'],
+      ['Studio', '#464c55'],
+    ];
+    for (const [name, hex] of presets) {
+      const sw = document.createElement('button');
+      sw.className = 'swatch';
+      sw.title = name;
+      sw.style.background = hex;
+      sw.onclick = () => {
+        color.value = hex;
+        this.handlers.setBackground(hex);
+      };
+      row.appendChild(sw);
+    }
+    wrap.appendChild(row);
+    return wrap;
   }
 
   private detail(id: string, label: string, prompt: string): HTMLElement {

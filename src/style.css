@@ -258,6 +258,38 @@ canvas {
   font-style: italic;
 }
 
+.editor-world {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+.world-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.world-color {
+  width: 38px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 0;
+}
+.swatch:hover {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
 .editor-controls {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 12px;

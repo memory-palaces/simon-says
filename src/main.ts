@@ -81,6 +81,7 @@ class App {
       teleport: (id) => this.gotoLocus(id),
       undo: () => this.undo(),
       redo: () => this.redo(),
+      setBackground: (hex) => this.setBackground(hex),
     });
 
     this.viewer.start();
@@ -401,6 +402,13 @@ class App {
     this.loci.sync(this.palace);
     this.checkpoint();
     this.renderEditor();
+  }
+
+  private setBackground(hex: string): void {
+    this.palace.environment = { background: hex };
+    this.viewer.applyEnvironment(this.palace.environment);
+    this.markDirty();
+    this.checkpointSoon(); // coalesce colour-picker dragging into one undo step
   }
 
   private newPalace(): void {
