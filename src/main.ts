@@ -66,6 +66,8 @@ class App {
   private readonly scratchB = new THREE.Vector3();
 
   private draftTimer = 0;
+  /** False when there are edits since the last explicit Save or load. */
+  private savedClean = true;
 
   private readonly history = new History<Palace>(100);
   private histTimer = 0;
@@ -78,7 +80,7 @@ class App {
         this.checkpointSoon();
       },
       enterWalk: () => this.enterWalk(),
-      save: () => savePalace(this.palace),
+      save: () => this.save(),
       load: () => this.loadViaPicker(),
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
@@ -121,7 +123,9 @@ class App {
     const draft = loadDraft();
     if (draft) {
       await this.adoptPalace(draft);
-      this.history.reset(this.palace); // draft is the baseline; nothing to undo past it
+      // A restored draft was autosaved but never written to a file, so treat it as
+      // unsaved: New/Load will offer to Save it first.
+      this.savedClean = draft.loci.length === 0;
       return;
     }
 
@@ -174,8 +178,36 @@ class App {
 
   /** Queue a debounced autosave. Called after every change to the palace. */
   private markDirty(): void {
+    this.savedClean = false; // there are now changes not written to a file
     clearTimeout(this.draftTimer);
     this.draftTimer = window.setTimeout(() => saveDraft(this.palace), 400);
+  }
+
+  /** Explicit Save to a file; clears the unsaved-changes flag on success. */
+  private async save(): Promise<void> {
+    await savePalace(this.palace);
+    this.savedClean = true;
+  }
+
+  /**
+   * Before an action that discards the current work (New / Load), offer to save.
+   * Returns true if the caller should proceed. Autosave keeps a draft, but that
+   * draft is about to be overwritten, so this guards real data loss.
+   */
+  private async confirmDiscard(title: string): Promise<boolean> {
+    if (this.savedClean || this.palace.loci.length === 0) return true;
+    const choice = await chooseAction(this.mount, {
+      title,
+      message: `You have unsaved changes in “${this.palace.name}”.`,
+      choices: [
+        { id: 'save', label: 'Save, then continue', sublabel: 'Exports a .json first', variant: 'primary' },
+        { id: 'discard', label: 'Continue without saving' },
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    });
+    if (choice === null || choice === 'cancel') return false;
+    if (choice === 'save') await this.save();
+    return true;
   }
 
   /** Write the draft immediately (on tab close / hide, where a timer wouldn't fire). */
@@ -460,13 +492,15 @@ class App {
   private setLocalConfig(url: string, workflow: string): void {
     this.genSettings = { ...this.genSettings, local: { url, imageWorkflow: workflow } };
     saveGenerationSettings(this.genSettings);
-    // No re-render: that would drop focus while typing in the config fields.
+    // Update the panel's cached copy (no render — that would drop input focus) so a
+    // later re-render shows the current values instead of a stale blank.
+    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genConfig());
   }
 
   private setFalConfig(apiKey: string, model: string): void {
     this.genSettings = { ...this.genSettings, fal: { apiKey, model } };
     saveGenerationSettings(this.genSettings);
-    // No re-render: keep focus in the key/model fields while typing.
+    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genConfig());
   }
 
   private async testLocal(): Promise<void> {
@@ -507,15 +541,17 @@ class App {
     this.renderEditor();
   }
 
-  private newPalace(): void {
-    if (this.palace.loci.length > 0 && !confirm('Start a new palace? This clears the current draft. Use Save first to keep it.')) return;
+  private async newPalace(): Promise<void> {
+    if (!(await this.confirmDiscard('Start a new palace?'))) return;
     const name = this.palace.name;
     this.palace = createEmptyPalace(name);
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
     this.viewer.applyEnvironment(this.palace.environment);
     this.loci.sync(this.palace);
-    this.checkpoint();
+    this.history.reset(this.palace);
+    this.markDirty();
+    this.savedClean = true; // a fresh, empty palace has nothing unsaved to lose
     this.renderEditor();
   }
 
@@ -621,7 +657,7 @@ class App {
     if (choice === 'replace') await this.swapGeometry(file);
     else if (choice === 'new') await this.newPalaceWithGeometry(file);
     else if (choice === 'save-new') {
-      await savePalace(this.palace);
+      await this.save();
       await this.newPalaceWithGeometry(file);
     }
   }
@@ -655,6 +691,7 @@ class App {
       this.loci.sync(this.palace);
       this.history.reset(this.palace);
       this.markDirty();
+      this.savedClean = true;
       this.finishLoad();
     } catch (err) {
       console.error(err);
@@ -663,10 +700,10 @@ class App {
   }
 
   private async loadPalaceFile(file: File): Promise<void> {
+    if (!(await this.confirmDiscard(`Load “${file.name}”?`))) return;
     try {
       const palace = await readPalaceFile(file);
       await this.adoptPalace(palace);
-      this.checkpoint(); // loading is undoable (recover from an accidental Load)
     } catch (err) {
       console.error(err);
       this.overlay.showError(`Couldn't read "${file.name}" as a palace file.`);
@@ -674,12 +711,10 @@ class App {
   }
 
   private async loadViaPicker(): Promise<void> {
+    if (!(await this.confirmDiscard('Load a palace?'))) return;
     try {
       const palace = await openPalace();
-      if (palace) {
-        await this.adoptPalace(palace);
-        this.checkpoint();
-      }
+      if (palace) await this.adoptPalace(palace);
     } catch (err) {
       console.error(err);
       this.overlay.showError('Could not open that palace file.');
@@ -707,7 +742,9 @@ class App {
       this.editor.setNotice(`Palace "${palace.name}" loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);
     }
     this.loci.sync(this.palace);
-    this.markDirty();
+    this.markDirty(); // autosave the loaded palace as the current draft
+    this.history.reset(this.palace); // loaded file is the new baseline
+    this.savedClean = true; // matches the file on disk; nothing unsaved yet
     this.finishLoad();
   }
 
