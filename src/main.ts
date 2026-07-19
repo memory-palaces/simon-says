@@ -78,8 +78,9 @@ window.addEventListener('drop', async (e) => {
 
 setInterval(() => {
   const p = viewer.camera.position;
-  const grounded = viewer.fp.grounded ? 'floor' : 'air';
+  const mode = viewer.fp.mode;
+  const state = mode === 'fly' ? 'fly' : viewer.fp.grounded ? 'floor' : 'air';
   overlay.setHud(
-    `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}   ·   ${grounded}   ·   ${currentSpaceName}`,
+    `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}   ·   ${state}   ·   ${currentSpaceName}`,
   );
 }, 120);

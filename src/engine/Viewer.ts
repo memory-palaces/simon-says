@@ -68,8 +68,7 @@ export class Viewer {
     this.currentModel = model.scene;
     this.scene.add(model.scene);
 
-    this.fp.setColliders(model.scene);
-    this.fp.configureForSize(Math.max(model.size.x, model.size.z));
+    this.fp.setColliders(model.scene, model.bounds);
 
     // Fog distance should track the size of the space so big scenes don't clip.
     const reach = Math.max(model.size.x, model.size.z);
@@ -80,9 +79,9 @@ export class Viewer {
   }
 
   /**
-   * Pick a spawn point: horizontal centre of the model, dropped onto the highest
-   * floor found directly below. Falls back to the bounding-box centre if the
-   * downward ray misses (e.g. an open model with no floor under the centre).
+   * Pick a spawn point: horizontal centre of the model, standing on the LOWEST
+   * surface directly below (street / ground floor, not a rooftop the top-down ray
+   * hits first). Falls back to the bounding-box floor if the ray misses entirely.
    */
   private spawnInside(model: LoadedModel): void {
     const center = new THREE.Vector3();
@@ -93,7 +92,7 @@ export class Viewer {
       new THREE.Vector3(0, -1, 0),
     );
     const hits = ray.intersectObject(model.scene, true);
-    const floorY = hits.length > 0 ? hits[0].point.y : model.bounds.min.y;
+    const floorY = hits.length > 0 ? hits[hits.length - 1].point.y : model.bounds.min.y;
 
     this.fp.teleport(new THREE.Vector3(center.x, floorY + this.fp.eyeOffset, center.z));
   }
