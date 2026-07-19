@@ -139,7 +139,7 @@ class App {
   private async boot(): Promise<void> {
     // Restore an autosaved draft if one exists — never make the user start over
     // because of a refresh or crash.
-    const draft = loadDraft();
+    const draft = await loadDraft();
     if (draft) {
       await this.adoptPalace(draft);
       // A restored draft was autosaved but never written to a file, so treat it as
@@ -845,9 +845,6 @@ class App {
       }
     } else if (file) {
       this.editor.setNotice(`Palace "${palace.name}" loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);
-    } else if (this.palace.loci.length > 0) {
-      // Stripped autosave draft: the model was too large to keep in the browser.
-      this.editor.setNotice('The model was too large to autosave. Re-drop the .glb, or load your saved .json to restore it.');
     }
     this.loci.sync(this.palace);
     this.markDirty(); // autosave the loaded palace as the current draft
