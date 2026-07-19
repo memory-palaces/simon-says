@@ -13,6 +13,8 @@ import { GenerateDialog } from './ui/generateDialog';
 import { SettingsDialog } from './ui/settingsDialog';
 import { chooseAction } from './ui/choice';
 import {
+  applyStyle,
+  DEFAULT_FAL_MODEL,
   DEFAULT_LOCAL_URL,
   DEFAULT_LOCAL_WORKFLOW,
   getBackend,
@@ -118,8 +120,10 @@ class App {
       clearImage: (id) => this.clearImage(id),
       generate3d: (id) => this.generate3dFor(id),
       clearMesh: (id) => this.clearMesh(id),
+      setStyle: (id) => this.setStyle(id),
+      setFalModel: (model) => this.setFalModel(model),
     });
-    this.editor.setGeneration(this.backendOptions(), this.activeBackendId());
+    this.syncGeneration();
 
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
@@ -438,10 +442,20 @@ class App {
 
   // --- Editor handlers -------------------------------------------------------
 
+  /** Push the current generation state (pipeline, 3D support, style, model) to the panel. */
+  private syncGeneration(): void {
+    this.editor.setGeneration({
+      options: this.backendOptions(),
+      activeId: this.activeBackendId(),
+      can3d: getBackend(this.activeBackendId())?.can3d ?? false,
+      styleId: this.palace.generation?.style ?? 'none',
+      falModel: this.genSettings.fal?.model ?? DEFAULT_FAL_MODEL,
+    });
+  }
+
   /** Re-render the panel, carrying the current undo/redo state and world pipeline. */
   private renderEditor(): void {
-    const can3d = getBackend(this.activeBackendId())?.can3d ?? false;
-    this.editor.setGeneration(this.backendOptions(), this.activeBackendId(), can3d);
+    this.syncGeneration();
     this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
   }
 
@@ -498,13 +512,25 @@ class App {
 
   private setBackendId(id: string): void {
     // Pipeline choice is per-world, so it's saved with the palace and undoable.
-    this.palace.generation = { backendId: id };
+    this.palace.generation = { backendId: id, style: this.palace.generation?.style };
     // Seed default local config the first time the local backend is chosen anywhere.
     if (id === 'local' && !this.genSettings.local) {
       this.genSettings.local = { url: DEFAULT_LOCAL_URL, imageWorkflow: DEFAULT_LOCAL_WORKFLOW };
       saveGenerationSettings(this.genSettings);
     }
     this.checkpoint();
+    this.renderEditor();
+  }
+
+  private setStyle(id: string): void {
+    this.palace.generation = { backendId: this.activeBackendId(), style: id };
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private setFalModel(model: string): void {
+    this.genSettings = { ...this.genSettings, fal: { apiKey: this.genSettings.fal?.apiKey ?? '', model } };
+    saveGenerationSettings(this.genSettings);
     this.renderEditor();
   }
 
@@ -543,9 +569,12 @@ class App {
       this.sessionImages.set(id, history);
     }
 
+    // The style is a rendering modifier appended under the hood; the dialog still
+    // shows the user's own words. Their mnemonic text is never altered.
+    const styledPrompt = applyStyle(locus.image_prompt, this.palace.generation?.style);
     this.generateDialog.open(locus.image_prompt, {
       variants: history,
-      generate: (seed) => backend.generateImage(locus.image_prompt, seed),
+      generate: (seed) => backend.generateImage(styledPrompt, seed),
       onGenerated: (dataUrl) => history.push(dataUrl),
       onApprove: (dataUrl) => {
         locus.image_2d = dataUrl;

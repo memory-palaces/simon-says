@@ -1,5 +1,13 @@
 import { DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
-import { NONE_ID } from '../model/generation';
+import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
+
+interface GenState {
+  options: Array<{ id: string; label: string }>;
+  activeId: string;
+  can3d: boolean;
+  styleId: string;
+  falModel: string;
+}
 
 /** Everything the panel needs to call back into the app. */
 export interface EditorHandlers {
@@ -25,6 +33,8 @@ export interface EditorHandlers {
   clearImage(id: string): void;
   generate3d(id: string): void;
   clearMesh(id: string): void;
+  setStyle(id: string): void;
+  setFalModel(model: string): void;
 }
 
 /**
@@ -51,10 +61,12 @@ export class EditorPanel {
   private redoBtn: HTMLButtonElement | null = null;
 
   /** Active generation backend + the choices, for the per-world picker. */
-  private gen: { options: Array<{ id: string; label: string }>; activeId: string; can3d: boolean } = {
+  private gen: GenState = {
     options: [{ id: NONE_ID, label: 'None (text only)' }],
     activeId: NONE_ID,
     can3d: false,
+    styleId: 'none',
+    falModel: DEFAULT_FAL_MODEL,
   };
 
   constructor(mount: HTMLElement, handlers: EditorHandlers) {
@@ -76,8 +88,8 @@ export class EditorPanel {
     this.notice = text;
   }
 
-  setGeneration(options: Array<{ id: string; label: string }>, activeId: string, can3d = false): void {
-    this.gen = { options, activeId, can3d };
+  setGeneration(gen: GenState): void {
+    this.gen = gen;
   }
 
   /** Update undo/redo enablement without re-rendering (preserves input focus). */
@@ -332,9 +344,25 @@ export class EditorPanel {
     select.onchange = () => this.handlers.setBackendId(select.value);
     wrap.appendChild(select);
 
-    if (this.gen.activeId === 'fal' || this.gen.activeId === 'local') {
+    if (this.gen.activeId !== NONE_ID) {
+      // Quick model switch (fal only) — different models suit different subjects.
+      if (this.gen.activeId === 'fal') {
+        wrap.appendChild(
+          labeledSelect('Model', FAL_MODEL_PRESETS, this.gen.falModel, (v) => this.handlers.setFalModel(v)),
+        );
+      }
+      // Style modifier — a rendering suffix, not a change to the mnemonic.
+      wrap.appendChild(
+        labeledSelect(
+          'Style',
+          STYLE_PRESETS.map((s) => ({ id: s.id, label: s.label })),
+          this.gen.styleId,
+          (v) => this.handlers.setStyle(v),
+        ),
+      );
+
       const hint = div('locus-gen-hint');
-      hint.innerHTML = 'Set this pipeline’s keys/endpoint in <b>Settings</b> (the ⚙ button above).';
+      hint.innerHTML = 'Keys/endpoint live in <b>Settings</b> (⚙). “3D-ready” style favours a single object on a plain background.';
       wrap.appendChild(hint);
     }
     return wrap;
@@ -346,6 +374,30 @@ export class EditorPanel {
 function div(className: string): HTMLElement {
   const el = document.createElement('div');
   el.className = className;
+  return el;
+}
+
+function labeledSelect(
+  label: string,
+  options: Array<{ id: string; label: string }>,
+  value: string,
+  onChange: (value: string) => void,
+): HTMLElement {
+  const el = div('field');
+  const lab = document.createElement('label');
+  lab.textContent = label;
+  const select = document.createElement('select');
+  select.className = 'gen-select';
+  for (const opt of options) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    if (opt.id === value) o.selected = true;
+    select.appendChild(o);
+  }
+  select.onchange = () => onChange(select.value);
+  lab.appendChild(select);
+  el.appendChild(lab);
   return el;
 }
 

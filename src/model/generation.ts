@@ -35,6 +35,39 @@ export interface GenerationBackend {
 
 export const NONE_ID = 'none';
 
+/**
+ * User-selectable style modifiers. Each suffix is APPENDED to the user's prompt to
+ * steer the render — it never replaces or rewrites the mnemonic. The "3D-ready"
+ * style asks for a single isolated object on a plain background, which is far
+ * easier to turn into a clean 3D mesh than a full scene.
+ */
+export const STYLE_PRESETS: Array<{ id: string; label: string; suffix: string }> = [
+  { id: 'none', label: 'No style', suffix: '' },
+  { id: 'realistic', label: 'Realistic', suffix: ', photorealistic, highly detailed' },
+  { id: 'cartoon', label: 'Cartoon', suffix: ', cartoon illustration, bold outlines, flat vivid colors' },
+  { id: 'painterly', label: 'Painterly', suffix: ', digital painting, expressive brush strokes' },
+  {
+    id: 'prop3d',
+    label: '3D-ready (isolated object)',
+    suffix:
+      ', a single isolated object, centered, full object in frame, plain neutral studio background, soft even lighting, no scene, product shot',
+  },
+];
+
+/** Common fal.ai image models for the quick-switch dropdown. */
+export const FAL_MODEL_PRESETS: Array<{ id: string; label: string }> = [
+  { id: 'fal-ai/flux/schnell', label: 'Flux schnell (fast)' },
+  { id: 'fal-ai/flux/dev', label: 'Flux dev (quality)' },
+  { id: 'fal-ai/fast-sdxl', label: 'Fast SDXL' },
+  { id: 'fal-ai/flux-pro/v1.1', label: 'Flux Pro 1.1' },
+];
+
+/** Append the chosen style's suffix to the prompt (the words themselves are untouched). */
+export function applyStyle(prompt: string, styleId?: string): string {
+  const preset = STYLE_PRESETS.find((p) => p.id === styleId);
+  return preset && preset.suffix ? `${prompt}${preset.suffix}` : prompt;
+}
+
 /** A tiny stable string hash (FNV-1a) for cache keys keyed on the prompt. */
 export function promptHash(prompt: string): string {
   let h = 0x811c9dc5;

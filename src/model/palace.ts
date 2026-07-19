@@ -53,6 +53,8 @@ export interface Environment {
 /** Which generation pipeline THIS world uses. Credentials live in app settings. */
 export interface WorldGeneration {
   backendId: string;
+  /** Optional style-preset id appended to renders (a rendering modifier, not the mnemonic). */
+  style?: string;
 }
 
 export interface Palace {
