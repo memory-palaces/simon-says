@@ -23,6 +23,8 @@ export interface EditorHandlers {
   setBackendId(id: string): void;
   generate(id: string): void;
   clearImage(id: string): void;
+  generate3d(id: string): void;
+  clearMesh(id: string): void;
 }
 
 /**
@@ -49,9 +51,10 @@ export class EditorPanel {
   private redoBtn: HTMLButtonElement | null = null;
 
   /** Active generation backend + the choices, for the per-world picker. */
-  private gen: { options: Array<{ id: string; label: string }>; activeId: string } = {
+  private gen: { options: Array<{ id: string; label: string }>; activeId: string; can3d: boolean } = {
     options: [{ id: NONE_ID, label: 'None (text only)' }],
     activeId: NONE_ID,
+    can3d: false,
   };
 
   constructor(mount: HTMLElement, handlers: EditorHandlers) {
@@ -73,8 +76,8 @@ export class EditorPanel {
     this.notice = text;
   }
 
-  setGeneration(options: Array<{ id: string; label: string }>, activeId: string): void {
-    this.gen = { options, activeId };
+  setGeneration(options: Array<{ id: string; label: string }>, activeId: string, can3d = false): void {
+    this.gen = { options, activeId, can3d };
   }
 
   /** Update undo/redo enablement without re-rendering (preserves input focus). */
@@ -291,6 +294,21 @@ export class EditorPanel {
       thumb.className = 'locus-thumb';
       thumb.src = locus.image_2d;
       wrap.appendChild(thumb);
+    }
+
+    // Second stage: turn the approved image into a 3D mesh (gated on 2D + can3d).
+    if (locus.image_2d && this.gen.can3d) {
+      const row = div('locus-gen-row');
+      row.appendChild(
+        button(locus.mesh_3d ? '↻ Remake 3D' : '⬗ Make 3D', '', () => this.handlers.generate3d(locus.id)),
+      );
+      if (locus.mesh_3d) {
+        const tag = div('locus-gen-hint');
+        tag.textContent = '3D mesh ✓';
+        row.appendChild(tag);
+        row.appendChild(iconButton('🗑', 'remove 3D', () => this.handlers.clearMesh(locus.id)));
+      }
+      wrap.appendChild(row);
     }
     return wrap;
   }

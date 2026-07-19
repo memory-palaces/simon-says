@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Locus, Palace, Vec3 } from '../model/palace';
+
+const meshLoader = new GLTFLoader();
 
 /** Look up the live scene object for an asset id (its current world transform). */
 export type ResolveAsset = (assetId: string) => THREE.Object3D | null;
@@ -22,6 +25,9 @@ interface Marker {
   /** Billboard of the generated 2D image, shown above the marker when present. */
   image?: THREE.Sprite;
   imageSrc?: string;
+  /** Generated 3D mesh placed at the locus; supersedes the flat image. */
+  mesh3d?: THREE.Object3D;
+  mesh3dSrc?: string;
 }
 
 /**
@@ -67,6 +73,7 @@ export class LociLayer {
         marker.label.material.needsUpdate = true;
       }
       this.updateImage(marker, locus.image_2d);
+      void this.updateMesh3d(marker, locus.mesh_3d);
     }
     // Drop markers whose loci are gone.
     for (const [id, marker] of this.markers) {
@@ -115,6 +122,42 @@ export class LociLayer {
       marker.image.visible = false;
       marker.imageSrc = undefined;
     }
+  }
+
+  /** Load and place the generated GLB at the locus, scaled to a sensible size. */
+  private async updateMesh3d(marker: Marker, src: string | null): Promise<void> {
+    if ((src ?? undefined) === marker.mesh3dSrc) return;
+    marker.mesh3dSrc = src ?? undefined;
+
+    if (marker.mesh3d) {
+      marker.group.remove(marker.mesh3d);
+      disposeSubtree(marker.mesh3d);
+      marker.mesh3d = undefined;
+    }
+    if (!src) {
+      if (marker.image) marker.image.visible = true; // flat image returns
+      return;
+    }
+
+    const gltf = await meshLoader.loadAsync(src);
+    if (marker.mesh3dSrc !== src) {
+      disposeSubtree(gltf.scene); // a newer change superseded this load
+      return;
+    }
+    const obj = gltf.scene;
+    // Normalise: fit the mesh into ~0.8 units and sit it just above the marker.
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const scale = 0.8 / (Math.max(size.x, size.y, size.z) || 1);
+    obj.scale.setScalar(scale);
+    obj.position.set(-center.x * scale, 0.6 - center.y * scale, -center.z * scale);
+
+    marker.group.add(obj);
+    marker.mesh3d = obj;
+    if (marker.image) marker.image.visible = false; // the 3D object supersedes the flat image
   }
 
   setSelected(id: string | null): void {
@@ -246,6 +289,18 @@ export class LociLayer {
     this.labelTextures.set(order, tex);
     return tex;
   }
+}
+
+/** Free GPU memory for a loaded mesh subtree before we drop it. */
+function disposeSubtree(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.geometry?.dispose();
+      const mat = obj.material;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat?.dispose();
+    }
+  });
 }
 
 // A radial-gradient sprite used for every marker's glow (built once, shared).

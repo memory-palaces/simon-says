@@ -11,16 +11,26 @@
  * localhost backend exists. Real backends implement the same interface.
  */
 
+import * as THREE from 'three';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
 export interface GenerationBackend {
   readonly id: string;
   readonly label: string;
   /** True if it needs no network or API key (works fully offline). */
   readonly offline: boolean;
+  /** True if this backend can turn an approved 2D image into a 3D mesh. */
+  readonly can3d: boolean;
   /**
    * Render `prompt` (the user's exact words) to a 2D image, returned as a PNG data
    * URL. `seed` lets "reroll" produce a different image for the same prompt.
    */
   generateImage(prompt: string, seed: number): Promise<string>;
+  /**
+   * The expensive second stage, gated on 2D approval: turn the approved image into
+   * a GLB, returned as a data URL. Present only when `can3d` is true.
+   */
+  imageTo3d?(imageDataUrl: string): Promise<string>;
 }
 
 export const NONE_ID = 'none';
@@ -45,6 +55,19 @@ export class PlaceholderBackend implements GenerationBackend {
   readonly id = 'placeholder';
   readonly label = 'Placeholder (offline)';
   readonly offline = true;
+  readonly can3d = true;
+
+  /** "3D" placeholder: a textured double-sided plane exported as a GLB. */
+  async imageTo3d(imageDataUrl: string): Promise<string> {
+    const tex = await new THREE.TextureLoader().loadAsync(imageDataUrl);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshStandardMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }),
+    );
+    const glb = (await new GLTFExporter().parseAsync(mesh, { binary: true })) as ArrayBuffer;
+    return `data:model/gltf-binary;base64,${base64FromArrayBuffer(glb)}`;
+  }
 
   async generateImage(prompt: string, seed: number): Promise<string> {
     const size = 512;
@@ -132,6 +155,7 @@ export class LocalComfyBackend implements GenerationBackend {
   readonly id = 'local';
   readonly label = 'Local ComfyUI (localhost)';
   readonly offline = false;
+  readonly can3d = false; // local TRELLIS workflow support is a later step
 
   async generateImage(prompt: string, seed: number): Promise<string> {
     const cfg = loadGenerationSettings().local;
@@ -211,6 +235,25 @@ export class FalBackend implements GenerationBackend {
   readonly id = 'fal';
   readonly label = 'fal.ai (cloud, API key)';
   readonly offline = false;
+  readonly can3d = true;
+
+  /** Image → GLB via fal-ai/trellis. Unverified here (needs a key). */
+  async imageTo3d(imageDataUrl: string): Promise<string> {
+    const cfg = loadGenerationSettings().fal;
+    if (!cfg?.apiKey) throw new Error('Enter your fal.ai API key in Settings.');
+    const res = await fetch('https://fal.run/fal-ai/trellis', {
+      method: 'POST',
+      headers: { Authorization: `Key ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url: imageDataUrl }),
+    });
+    if (!res.ok) throw new Error(`fal.ai 3D error ${res.status}. (Large images may need a hosted URL.)`);
+    const data = (await res.json()) as { model_mesh?: { url?: string } };
+    const url = data.model_mesh?.url;
+    if (!url) throw new Error('fal.ai returned no mesh.');
+    const glb = await fetch(url);
+    if (!glb.ok) throw new Error('Could not download the generated mesh from fal.ai.');
+    return blobToDataUrl(await glb.blob());
+  }
 
   async generateImage(prompt: string, seed: number): Promise<string> {
     const cfg = loadGenerationSettings().fal;
@@ -292,6 +335,17 @@ function escapeJsonString(s: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Base64-encode an ArrayBuffer in chunks (avoids call-stack limits on big GLBs). */
+function base64FromArrayBuffer(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {

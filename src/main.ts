@@ -114,6 +114,8 @@ class App {
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
       clearImage: (id) => this.clearImage(id),
+      generate3d: (id) => this.generate3dFor(id),
+      clearMesh: (id) => this.clearMesh(id),
     });
     this.editor.setGeneration(this.backendOptions(), this.activeBackendId());
 
@@ -436,7 +438,8 @@ class App {
 
   /** Re-render the panel, carrying the current undo/redo state and world pipeline. */
   private renderEditor(): void {
-    this.editor.setGeneration(this.backendOptions(), this.activeBackendId());
+    const can3d = getBackend(this.activeBackendId())?.can3d ?? false;
+    this.editor.setGeneration(this.backendOptions(), this.activeBackendId(), can3d);
     this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
   }
 
@@ -546,6 +549,38 @@ class App {
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus) return;
     locus.image_2d = null;
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  /** Second stage: turn the approved image into a 3D mesh at the locus. */
+  private async generate3dFor(id: string): Promise<void> {
+    const backend = getBackend(this.activeBackendId());
+    if (!backend?.imageTo3d) return;
+    const locus = this.palace.loci.find((l) => l.id === id);
+    if (!locus?.image_2d) return;
+
+    this.editor.setNotice('Rendering 3D… this can take a while.');
+    this.renderEditor();
+    try {
+      const glb = await backend.imageTo3d(locus.image_2d);
+      locus.mesh_3d = glb;
+      this.editor.setNotice(null);
+      this.loci.sync(this.palace);
+      this.checkpoint();
+      this.renderEditor();
+    } catch (err) {
+      console.error(err);
+      this.editor.setNotice(err instanceof Error ? err.message : '3D generation failed.');
+      this.renderEditor();
+    }
+  }
+
+  private clearMesh(id: string): void {
+    const locus = this.palace.loci.find((l) => l.id === id);
+    if (!locus) return;
+    locus.mesh_3d = null;
     this.loci.sync(this.palace);
     this.checkpoint();
     this.renderEditor();
