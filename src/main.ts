@@ -881,7 +881,7 @@ class App {
   }
 
   private async newPalace(): Promise<void> {
-    if (!(await this.confirmDiscard('Start a new palace?'))) return;
+    if (!(await this.confirmDiscard('Start a new world?'))) return;
     // A fresh palace gets a fresh name (not the previous one's) but keeps the model
     // currently loaded so you can start placing loci right away.
     this.palace = createEmptyPalace();
@@ -992,7 +992,7 @@ class App {
     } else {
       this.viewer.clearModel();
       if (this.palace.loci.length === 0) {
-        this.editor.setNotice('Empty inner palace — drag a .glb onto the window to give it a space.');
+        this.editor.setNotice('Empty inner world — drag a .glb onto the window to give it a space.');
       }
     }
     this.loci.sync(this.palace);
@@ -1118,7 +1118,7 @@ class App {
       title: `Load “${file.name}”`,
       message: `You have ${n} ${n === 1 ? 'locus' : 'loci'} in “${this.palace.name}”. This is probably a different space.`,
       choices: [
-        { id: 'new', label: 'Start a new palace with this model', sublabel: 'Discards the current loci', variant: 'primary' },
+        { id: 'new', label: 'Start a new world with this model', sublabel: 'Discards the current loci', variant: 'primary' },
         { id: 'save-new', label: 'Save current, then start new', sublabel: 'Exports a .json first' },
         { id: 'replace', label: 'Keep my loci, just swap the model', sublabel: 'For an updated version of the same space' },
         { id: 'cancel', label: 'Cancel' },
@@ -1184,12 +1184,12 @@ class App {
       await this.adoptPalace(palace);
     } catch (err) {
       console.error(err);
-      this.overlay.showError(`Couldn't read "${file.name}" as a palace file.`);
+      this.overlay.showError(`Couldn't read "${file.name}" as a world file.`);
     }
   }
 
   private async loadViaPicker(): Promise<void> {
-    if (!(await this.confirmDiscard('Load a palace?'))) return;
+    if (!(await this.confirmDiscard('Load a world?'))) return;
     try {
       const opened = await openPalace();
       if (opened) {
@@ -1220,7 +1220,7 @@ class App {
       try {
         await this.viewer.loadUrl(file);
       } catch {
-        this.editor.setNotice(`Palace loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);
+        this.editor.setNotice(`World loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);
       }
     } else if (file) {
       this.editor.setNotice(`Palace "${palace.name}" loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);

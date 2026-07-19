@@ -130,7 +130,7 @@ export class EditorPanel {
       const crumb = div('nest-crumb');
       crumb.textContent = this.nesting.trail.join('  ›  ');
       const back = button('▲ Return', '', () => this.handlers.returnToParent());
-      back.title = 'Return to parent palace (Backspace)';
+      back.title = 'Return to parent world (Backspace)';
       bar.append(crumb, back);
       this.root.appendChild(bar);
     }
@@ -146,7 +146,7 @@ export class EditorPanel {
     const name = document.createElement('input');
     name.className = 'palace-name';
     name.value = palace.name;
-    name.setAttribute('aria-label', 'Palace name');
+    name.setAttribute('aria-label', 'World name');
     name.oninput = () => this.handlers.renamePalace(name.value);
     header.appendChild(name);
 
@@ -397,7 +397,7 @@ export class EditorPanel {
 
     // Nested child palace: a whole space you can step into at this locus.
     if (locus.child_palace) {
-      const nameField = field('Inner palace', 'name this inner space');
+      const nameField = field('Inner world', 'name this inner space');
       const nm = nameField.input as HTMLInputElement;
       nm.value = locus.child_palace.name;
       nm.oninput = () => this.handlers.renameChild(locus.id, nm.value);
@@ -405,11 +405,11 @@ export class EditorPanel {
 
       const row = div('locus-gen-row');
       row.appendChild(button('↳ Enter', '', () => this.handlers.enterChild(locus.id)));
-      row.appendChild(iconButton('🗑', 'remove inner palace', () => this.handlers.removeChild(locus.id)));
+      row.appendChild(iconButton('🗑', 'remove inner world', () => this.handlers.removeChild(locus.id)));
       wrap.appendChild(row);
     } else {
       const row = div('locus-gen-row');
-      row.appendChild(button('➕ Add inner palace', '', () => this.handlers.enterChild(locus.id)));
+      row.appendChild(button('➕ Add inner world', '', () => this.handlers.enterChild(locus.id)));
       wrap.appendChild(row);
     }
 
