@@ -257,6 +257,33 @@ canvas {
   opacity: 0.85;
   font-style: italic;
 }
+
+.editor-controls {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+.ctrl-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ui-dim);
+  margin-bottom: 8px;
+}
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--ui-fg);
+}
+.ctrl-grid span:nth-child(odd) {
+  color: var(--ui-dim);
+}
+.ctrl-grid em {
+  color: var(--ui-dim);
+  font-style: normal;
+  font-size: 11px;
+}
 .editor-notice {
   background: rgba(255, 207, 92, 0.14);
   border: 1px solid rgba(255, 207, 92, 0.4);

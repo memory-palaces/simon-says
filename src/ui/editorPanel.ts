@@ -157,6 +157,24 @@ export class EditorPanel {
     }
     this.root.appendChild(list);
 
+    // --- Controls reference ----------------------------------------------------
+    const controls = div('editor-controls');
+    controls.innerHTML = `
+      <div class="ctrl-title">Controls</div>
+      <div class="ctrl-grid">
+        <span>Move</span><span>WASD / arrow keys</span>
+        <span>Look</span><span>mouse</span>
+        <span>Run</span><span>Shift</span>
+        <span>Jump</span><span>Space</span>
+        <span>Fly / no-clip</span><span>F <em>(fly = pass through walls)</em></span>
+        <span>Fly up / down</span><span>Space / C (or Ctrl)</span>
+        <span>Drop a locus</span><span>E</span>
+        <span>Delete / move locus</span><span>X / G <em>(aim at a marker)</em></span>
+        <span>Open locus editor</span><span>click a marker</span>
+        <span>Back to this panel</span><span>Esc</span>
+      </div>`;
+    this.root.appendChild(controls);
+
     // --- Core-principle note ---------------------------------------------------
     const note = div('editor-note');
     note.innerHTML =

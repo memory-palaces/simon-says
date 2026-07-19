@@ -31,6 +31,7 @@ export class FirstPersonControls {
   private readonly collisionRadius = 0.3; // how close a wall can get before we stop
   private readonly stepHeight = 0.5; // vertical lip we can climb without jumping
   private readonly gravity = 20.0; // m/s^2 downward pull
+  private readonly jumpSpeed = 6.5; // launch velocity for a Space jump (~1 m hop)
 
   // Set per model at load. The ground probe must reach the lowest floor from any
   // height in the model, and we clamp falls so walking off the map can't drop you
@@ -198,9 +199,16 @@ export class FirstPersonControls {
 
     if (this.camera.position.y <= targetEyeY) {
       // At or below stand height (walking on ground, or stepping up a small lip).
-      this.camera.position.y = targetEyeY;
-      this.velocityY = 0;
-      this.onGround = true;
+      if (this.keys.has('Space')) {
+        // Quake-style jump: launch upward, leave the ground this frame.
+        this.velocityY = this.jumpSpeed;
+        this.camera.position.y += this.velocityY * dt;
+        this.onGround = false;
+      } else {
+        this.camera.position.y = targetEyeY;
+        this.velocityY = 0;
+        this.onGround = true;
+      }
     } else {
       // Above the ground by more than a step — airborne. Fall toward it, then land.
       this.fall(dt);
