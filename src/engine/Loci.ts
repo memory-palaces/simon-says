@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Locus, Palace, Vec3 } from '../model/palace';
 
 const meshLoader = new GLTFLoader();
+const PORTAL_AXIS = new THREE.Vector3(0, 0, 1); // torus's local axis, aligned to the surface normal
 
 /** Look up the live scene object for an asset id (its current world transform). */
 export type ResolveAsset = (assetId: string) => THREE.Object3D | null;
@@ -32,6 +33,8 @@ interface Marker {
   normal: THREE.Vector3;
   /** Whether this locus holds a nested child palace (drives the doorway colour). */
   hasChild?: boolean;
+  /** A ring shown around doorway loci so they read as an enterable portal. */
+  portal?: THREE.Mesh;
   /** Per-object transform (applies to the image/mesh only, not the orb). */
   objectScale: number;
   objectRot: THREE.Vector3; // degrees
@@ -94,6 +97,7 @@ export class LociLayer {
       marker.objectScale = locus.object_scale ?? 1;
       const r = locus.object_rotation ?? [0, 0, 0];
       marker.objectRot.set(r[0], r[1], r[2]);
+      this.updatePortal(marker);
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
@@ -127,6 +131,7 @@ export class LociLayer {
    */
   private positionChildren(marker: Marker): void {
     const os = marker.objectScale;
+    if (marker.portal) marker.portal.quaternion.setFromUnitVectors(PORTAL_AXIS, marker.normal);
     if (marker.image) {
       marker.image.scale.setScalar(0.9 * os);
       marker.image.position.copy(marker.normal).multiplyScalar(0.5 * os);
@@ -225,6 +230,33 @@ export class LociLayer {
     marker.mesh3d = obj;
     this.positionChildren(marker);
     if (marker.image) marker.image.visible = false; // the 3D object supersedes the flat image
+  }
+
+  private portalPhase = 0;
+
+  /** Gently pulse portal rings each frame so doorways feel alive. */
+  update(): void {
+    this.portalPhase += 0.05;
+    const s = 1 + 0.06 * Math.sin(this.portalPhase);
+    for (const marker of this.markers.values()) {
+      if (marker.portal) marker.portal.scale.setScalar(s);
+    }
+  }
+
+  private updatePortal(marker: Marker): void {
+    if (marker.hasChild && !marker.portal) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.24, 0.03, 12, 40),
+        new THREE.MeshBasicMaterial({ color: 0xb98cff, toneMapped: false, transparent: true, opacity: 0.9 }),
+      );
+      marker.group.add(ring);
+      marker.portal = ring;
+    } else if (!marker.hasChild && marker.portal) {
+      marker.group.remove(marker.portal);
+      marker.portal.geometry.dispose();
+      (marker.portal.material as THREE.Material).dispose();
+      marker.portal = undefined;
+    }
   }
 
   get xrayOn(): boolean {

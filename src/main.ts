@@ -445,6 +445,7 @@ class App {
   // --- Per-frame: crosshair targeting + move + HUD ---------------------------
 
   private onFrame(): void {
+    this.loci.update(); // pulse portal rings (all modes)
     if (this.mode === 'walk') {
       const hit = this.viewer.raycastSurface();
       if (this.movingId && hit) {
