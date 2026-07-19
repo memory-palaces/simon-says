@@ -542,6 +542,21 @@ canvas {
   margin-top: 2px;
 }
 
+/* --- Scene-transition fade ------------------------------------------------- */
+
+.fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 28;
+  transition: opacity 0.18s ease;
+}
+.fade.on {
+  opacity: 1;
+}
+
 /* --- Go-to palette --------------------------------------------------------- */
 
 .goto-card {

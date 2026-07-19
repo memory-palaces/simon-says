@@ -95,7 +95,12 @@ class App {
   private histTimer = 0;
   private histPending = false;
 
+  /** Full-screen fade used to mask scene swaps (entering/leaving a child palace). */
+  private readonly fadeEl = document.createElement('div');
+
   constructor() {
+    this.fadeEl.className = 'fade';
+    this.mount.appendChild(this.fadeEl);
     this.editor = new EditorPanel(this.mount, {
       renamePalace: (name) => {
         this.palace.name = name;
@@ -128,6 +133,7 @@ class App {
       redo: () => this.redo(),
       setBackground: (hex) => this.setBackground(hex),
       setBrightness: (v) => this.setBrightness(v),
+      setPlayerScale: (v) => this.setPlayerScale(v),
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
       clearImage: (id) => this.clearImage(id),
@@ -576,6 +582,13 @@ class App {
     this.checkpointSoon(); // coalesce slider dragging into one undo step
   }
 
+  private setPlayerScale(value: number): void {
+    this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), playerScale: value };
+    this.viewer.fp.setScale(value);
+    this.markDirty();
+    this.checkpointSoon();
+  }
+
   // --- Generation ------------------------------------------------------------
 
   private backendOptions(): Array<{ id: string; label: string }> {
@@ -827,6 +840,16 @@ class App {
     if (this.mode === 'edit') this.renderEditor();
   }
 
+  /** Fade to black, run the scene swap, fade back — like stepping through a door. */
+  private async transition(swap: () => Promise<void>): Promise<void> {
+    this.fadeEl.classList.add('on');
+    await wait(180);
+    await swap();
+    // Let the new scene render a frame before fading back in.
+    await wait(60);
+    this.fadeEl.classList.remove('on');
+  }
+
   /** Descend into a locus's child palace (creating an empty one if needed). */
   private async enterChild(locusId: string): Promise<void> {
     const locus = this.palace.loci.find((l) => l.id === locusId);
@@ -835,6 +858,7 @@ class App {
       locus.child_palace = createEmptyPalace(locus.label || 'Inner space');
       this.checkpoint();
     }
+    const child = locus.child_palace!; // guaranteed non-null after the block above
     // Remember the camera so Return drops us back exactly where we were.
     this.navStack.push({
       locusId,
@@ -842,9 +866,11 @@ class App {
       camQuat: this.viewer.camera.quaternion.clone(),
       flying: this.viewer.fp.mode === 'fly',
     });
-    this.palace = locus.child_palace;
-    this.selectedId = null;
-    await this.enterPalaceGeometry();
+    await this.transition(async () => {
+      this.palace = child;
+      this.selectedId = null;
+      await this.enterPalaceGeometry();
+    });
     this.updateReturnUi();
     this.toasts.info(`Entered “${this.palace.name}” — Backspace to return`);
   }
@@ -853,12 +879,14 @@ class App {
   private async returnToParent(): Promise<void> {
     const frame = this.navStack.pop();
     if (!frame) return;
-    this.palace = this.resolveCurrent();
-    this.selectedId = null;
-    await this.enterPalaceGeometry();
-    this.viewer.fp.setFlying(frame.flying);
-    this.viewer.camera.position.copy(frame.camPos);
-    this.viewer.camera.quaternion.copy(frame.camQuat);
+    await this.transition(async () => {
+      this.palace = this.resolveCurrent();
+      this.selectedId = null;
+      await this.enterPalaceGeometry();
+      this.viewer.fp.setFlying(frame.flying);
+      this.viewer.camera.position.copy(frame.camPos);
+      this.viewer.camera.quaternion.copy(frame.camQuat);
+    });
     this.updateReturnUi();
   }
 
@@ -1044,6 +1072,10 @@ class App {
 /** "mainfloor.glb" -> "mainfloor" for naming a new palace after its model. */
 function baseName(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, '') || 'Untitled palace';
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** A short label for toasts/logs from a prompt or cue. */

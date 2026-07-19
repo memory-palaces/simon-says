@@ -54,6 +54,8 @@ export interface Environment {
   background: string;
   /** Global light multiplier (1 = default). Brightens dark interiors. */
   brightness?: number;
+  /** Player scale for this world (1 = human). <1 = tiny (space feels huge), >1 = giant. */
+  playerScale?: number;
 }
 
 /** Which generation pipeline THIS world uses. Credentials live in app settings. */

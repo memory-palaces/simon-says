@@ -30,6 +30,7 @@ export interface EditorHandlers {
   redo(): void;
   setBackground(hex: string): void;
   setBrightness(value: number): void;
+  setPlayerScale(value: number): void;
   setBackendId(id: string): void;
   generate(id: string): void;
   clearImage(id: string): void;
@@ -284,6 +285,21 @@ export class EditorPanel {
     bright.oninput = () => this.handlers.setBrightness(parseFloat(bright.value));
     brightRow.append(brightLabel, bright);
     wrap.appendChild(brightRow);
+
+    // Player scale — be tiny (space feels huge) or a giant. Logarithmic-ish range.
+    const scaleRow = div('bright-row');
+    const scaleLabel = document.createElement('span');
+    scaleLabel.className = 'bright-label';
+    scaleLabel.textContent = 'Player scale';
+    const scale = document.createElement('input');
+    scale.type = 'range';
+    scale.min = '0.1';
+    scale.max = '5';
+    scale.step = '0.1';
+    scale.value = String(palace.environment?.playerScale ?? 1);
+    scale.oninput = () => this.handlers.setPlayerScale(parseFloat(scale.value));
+    scaleRow.append(scaleLabel, scale);
+    wrap.appendChild(scaleRow);
     return wrap;
   }
 

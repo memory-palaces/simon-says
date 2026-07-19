@@ -23,15 +23,24 @@ export class FirstPersonControls {
   /** Meshes we test against for floor and walls. Swapped when the model changes. */
   private colliders: THREE.Object3D[] = [];
 
-  // Movement tuning — fixed, human scale (metres / seconds). Not model-dependent.
-  private readonly eyeHeight = 1.7; // camera height above the feet
-  private readonly walkSpeed = 5.0; // ground speed
-  private readonly flySpeed = 12.0; // free-fly speed
+  // Base movement tuning — human scale (metres / seconds). Multiplied by a
+  // per-world player scale (setScale) so you can be a giant under a sky dome or
+  // tiny inside a fridge child-palace.
+  private readonly baseEye = 1.7;
+  private readonly baseWalk = 5.0;
+  private readonly baseFly = 12.0;
+  private readonly baseCollision = 0.3;
+  private readonly baseStep = 0.5;
+  private readonly baseJump = 6.5;
   private readonly runMultiplier = 2.5; // hold Shift
-  private readonly collisionRadius = 0.3; // how close a wall can get before we stop
-  private readonly stepHeight = 0.5; // vertical lip we can climb without jumping
-  private readonly gravity = 20.0; // m/s^2 downward pull
-  private readonly jumpSpeed = 6.5; // launch velocity for a Space jump (~1 m hop)
+  private readonly gravity = 20.0; // m/s^2 downward pull (constant, so jumps feel right)
+
+  private eyeHeight = this.baseEye; // camera height above the feet
+  private walkSpeed = this.baseWalk; // ground speed
+  private flySpeed = this.baseFly; // free-fly speed
+  private collisionRadius = this.baseCollision; // how close a wall can get before we stop
+  private stepHeight = this.baseStep; // vertical lip we can climb without jumping
+  private jumpSpeed = this.baseJump; // launch velocity for a Space jump
 
   // Set per model at load. The ground probe must reach the lowest floor from any
   // height in the model, and we clamp falls so walking off the map can't drop you
@@ -98,6 +107,17 @@ export class FirstPersonControls {
   setFlying(on: boolean): void {
     this.flying = on;
     this.velocityY = 0;
+  }
+
+  /** Per-world player scale: <1 shrinks you (space feels huge), >1 makes you a giant. */
+  setScale(scale: number): void {
+    const k = THREE.MathUtils.clamp(scale, 0.05, 20);
+    this.eyeHeight = this.baseEye * k;
+    this.walkSpeed = this.baseWalk * k;
+    this.flySpeed = this.baseFly * k;
+    this.collisionRadius = this.baseCollision * k;
+    this.stepHeight = this.baseStep * k;
+    this.jumpSpeed = this.baseJump * Math.sqrt(k); // keeps jump height ~proportional
   }
 
   get locked(): boolean {

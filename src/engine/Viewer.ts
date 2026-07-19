@@ -237,6 +237,7 @@ export class Viewer {
     (this.scene.background as THREE.Color).copy(color);
     (this.scene.fog as THREE.Fog).color.copy(color);
     this.setBrightness(env?.brightness ?? 1);
+    this.fp.setScale(env?.playerScale ?? 1);
   }
 
   /** Point the camera at a target from a given position (used by review mode). */
