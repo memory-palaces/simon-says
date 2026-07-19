@@ -10,6 +10,7 @@ import { openPalace, readPalaceFile, savePalace } from './model/persistence';
 import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
+import { SettingsDialog } from './ui/settingsDialog';
 import { chooseAction } from './ui/choice';
 import {
   DEFAULT_LOCAL_URL,
@@ -49,6 +50,11 @@ class App {
   private readonly editor: EditorPanel;
   private readonly review = new ReviewOverlay(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
+  private readonly settingsDialog = new SettingsDialog(this.mount, {
+    setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
+    setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
+    testLocal: () => this.testLocal(),
+  });
 
   private genSettings: GenerationSettings = loadGenerationSettings();
 
@@ -85,6 +91,7 @@ class App {
       load: () => this.loadViaPicker(),
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
+      openSettings: () => this.settingsDialog.open(this.genConfig()),
       selectLocus: (id) => this.select(id),
       // rerender=false: re-rendering the panel on every keystroke would drop input
       // focus. The panel updates the affected row text in place instead. History is
@@ -106,11 +113,8 @@ class App {
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
       clearImage: (id) => this.clearImage(id),
-      setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
-      testLocal: () => this.testLocal(),
-      setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     });
-    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genConfig());
+    this.editor.setGeneration(this.backendOptions(), this.activeBackendId());
 
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
@@ -162,7 +166,7 @@ class App {
       this.review.hide();
       this.overlay.hide();
       this.movingId = null;
-      this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
+      this.renderEditor();
       this.editor.show();
     } else {
       // review — the overlay is driven by the review flow itself.
@@ -428,8 +432,9 @@ class App {
 
   // --- Editor handlers -------------------------------------------------------
 
-  /** Re-render the panel, always carrying the current undo/redo enablement. */
+  /** Re-render the panel, carrying the current undo/redo state and world pipeline. */
   private renderEditor(): void {
+    this.editor.setGeneration(this.backendOptions(), this.activeBackendId());
     this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
   }
 
@@ -479,45 +484,47 @@ class App {
     return { local: this.genSettings.local, fal: this.genSettings.fal };
   }
 
+  /** The pipeline THIS world uses (per-world, stored in the palace). */
+  private activeBackendId(): string {
+    return this.palace.generation?.backendId ?? NONE_ID;
+  }
+
   private setBackendId(id: string): void {
-    this.genSettings = { ...this.genSettings, backendId: id };
-    // Seed default local config the first time the local backend is chosen.
+    // Pipeline choice is per-world, so it's saved with the palace and undoable.
+    this.palace.generation = { backendId: id };
+    // Seed default local config the first time the local backend is chosen anywhere.
     if (id === 'local' && !this.genSettings.local) {
       this.genSettings.local = { url: DEFAULT_LOCAL_URL, imageWorkflow: DEFAULT_LOCAL_WORKFLOW };
+      saveGenerationSettings(this.genSettings);
     }
-    saveGenerationSettings(this.genSettings);
-    this.editor.setGeneration(this.backendOptions(), id, this.genConfig());
+    this.checkpoint();
     this.renderEditor();
   }
 
   private setLocalConfig(url: string, workflow: string): void {
     this.genSettings = { ...this.genSettings, local: { url, imageWorkflow: workflow } };
     saveGenerationSettings(this.genSettings);
-    // Update the panel's cached copy (no render — that would drop input focus) so a
-    // later re-render shows the current values instead of a stale blank.
-    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genConfig());
   }
 
   private setFalConfig(apiKey: string, model: string): void {
     this.genSettings = { ...this.genSettings, fal: { apiKey, model } };
     saveGenerationSettings(this.genSettings);
-    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId, this.genConfig());
   }
 
-  private async testLocal(): Promise<void> {
+  /** Returns a human-readable status for the Settings dialog to display. */
+  private async testLocal(): Promise<string> {
     const url = this.genSettings.local?.url ?? DEFAULT_LOCAL_URL;
     try {
       await testLocalConnection(url);
-      this.editor.setNotice(`ComfyUI reachable at ${url} ✓`);
+      return `Reachable at ${url} ✓`;
     } catch (err) {
-      this.editor.setNotice(err instanceof Error ? err.message : 'Connection failed.');
+      return err instanceof Error ? err.message : 'Connection failed.';
     }
-    this.renderEditor();
   }
 
   /** Render the locus's own words to a 2D image via the active backend, verbatim. */
   private generateFor(id: string): void {
-    const backend = getBackend(this.genSettings.backendId);
+    const backend = getBackend(this.activeBackendId());
     if (!backend) return;
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus || !locus.image_prompt.trim()) return;

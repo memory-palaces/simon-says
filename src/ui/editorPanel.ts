@@ -1,12 +1,5 @@
 import { DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
-import {
-  DEFAULT_FAL_MODEL,
-  DEFAULT_LOCAL_URL,
-  DEFAULT_LOCAL_WORKFLOW,
-  NONE_ID,
-  type FalConfig,
-  type LocalConfig,
-} from '../model/generation';
+import { NONE_ID } from '../model/generation';
 
 /** Everything the panel needs to call back into the app. */
 export interface EditorHandlers {
@@ -16,6 +9,7 @@ export interface EditorHandlers {
   load(): void;
   newPalace(): void;
   startReview(): void;
+  openSettings(): void;
   selectLocus(id: string): void;
   updateLabel(id: string, text: string): void;
   updatePrompt(id: string, text: string): void;
@@ -28,9 +22,6 @@ export interface EditorHandlers {
   setBackendId(id: string): void;
   generate(id: string): void;
   clearImage(id: string): void;
-  setLocalConfig(url: string, workflow: string): void;
-  testLocal(): void;
-  setFalConfig(apiKey: string, model: string): void;
 }
 
 /**
@@ -56,13 +47,8 @@ export class EditorPanel {
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
 
-  /** Active generation backend + the choices, for the picker and per-locus buttons. */
-  private gen: {
-    options: Array<{ id: string; label: string }>;
-    activeId: string;
-    local?: LocalConfig;
-    fal?: FalConfig;
-  } = {
+  /** Active generation backend + the choices, for the per-world picker. */
+  private gen: { options: Array<{ id: string; label: string }>; activeId: string } = {
     options: [{ id: NONE_ID, label: 'None (text only)' }],
     activeId: NONE_ID,
   };
@@ -86,12 +72,8 @@ export class EditorPanel {
     this.notice = text;
   }
 
-  setGeneration(
-    options: Array<{ id: string; label: string }>,
-    activeId: string,
-    config?: { local?: LocalConfig; fal?: FalConfig },
-  ): void {
-    this.gen = { options, activeId, local: config?.local, fal: config?.fal };
+  setGeneration(options: Array<{ id: string; label: string }>, activeId: string): void {
+    this.gen = { options, activeId };
   }
 
   /** Update undo/redo enablement without re-rendering (preserves input focus). */
@@ -136,6 +118,10 @@ export class EditorPanel {
     this.redoBtn.title = 'Redo (Ctrl/Cmd+Shift+Z)';
     this.redoBtn.disabled = !canRedo;
     actions.append(this.undoBtn, this.redoBtn);
+
+    const gear = button('⚙', '', () => this.handlers.openSettings());
+    gear.title = 'Settings (keys, controls)';
+    actions.appendChild(gear);
 
     header.appendChild(actions);
     this.root.appendChild(header);
@@ -191,29 +177,9 @@ export class EditorPanel {
     }
     this.root.appendChild(list);
 
-    // --- Generation backend ----------------------------------------------------
+    // --- This world: image pipeline + background -------------------------------
     this.root.appendChild(this.generationSection());
-
-    // --- World background ------------------------------------------------------
     this.root.appendChild(this.worldSection(palace));
-
-    // --- Controls reference ----------------------------------------------------
-    const controls = div('editor-controls');
-    controls.innerHTML = `
-      <div class="ctrl-title">Controls</div>
-      <div class="ctrl-grid">
-        <span>Move</span><span>WASD / arrow keys</span>
-        <span>Look</span><span>mouse</span>
-        <span>Run</span><span>Shift</span>
-        <span>Jump</span><span>Space</span>
-        <span>Fly / no-clip</span><span>F <em>(fly = pass through walls)</em></span>
-        <span>Fly up / down</span><span>Space / C (or Ctrl)</span>
-        <span>Drop a locus</span><span>E</span>
-        <span>Delete / move locus</span><span>X / G <em>(aim at a marker)</em></span>
-        <span>Open locus editor</span><span>click a marker</span>
-        <span>Back to this panel</span><span>Esc</span>
-      </div>`;
-    this.root.appendChild(controls);
 
     // --- Core-principle note ---------------------------------------------------
     const note = div('editor-note');
@@ -324,10 +290,11 @@ export class EditorPanel {
     return wrap;
   }
 
+  /** Per-world pipeline picker. Credentials live in Settings (the gear). */
   private generationSection(): HTMLElement {
     const wrap = div('editor-gen');
     const title = div('ctrl-title');
-    title.textContent = 'Image generation';
+    title.textContent = 'Image pipeline for this world';
     wrap.appendChild(title);
 
     const select = document.createElement('select');
@@ -342,65 +309,11 @@ export class EditorPanel {
     select.onchange = () => this.handlers.setBackendId(select.value);
     wrap.appendChild(select);
 
-    if (this.gen.activeId === 'local') wrap.appendChild(this.localConfig());
-    if (this.gen.activeId === 'fal') wrap.appendChild(this.falConfig());
-    return wrap;
-  }
-
-  /** fal.ai API key + model, shown when the fal backend is active. */
-  private falConfig(): HTMLElement {
-    const wrap = div('local-config');
-
-    const keyField = field('fal.ai API key', 'paste your key');
-    const key = keyField.input as HTMLInputElement;
-    key.type = 'password';
-    key.value = this.gen.fal?.apiKey ?? '';
-    key.autocomplete = 'off';
-
-    const modelField = field('Model', DEFAULT_FAL_MODEL);
-    const model = modelField.input as HTMLInputElement;
-    model.value = this.gen.fal?.model ?? DEFAULT_FAL_MODEL;
-
-    const save = () => this.handlers.setFalConfig(key.value, model.value);
-    key.oninput = save;
-    model.oninput = save;
-
-    wrap.append(keyField.el, modelField.el);
-    const hint = div('locus-gen-hint');
-    hint.innerHTML =
-      'Get a key at <code>fal.ai/dashboard/keys</code>. It stays in this browser and is sent only to fal.ai. Flux schnell is fast and cheap.';
-    wrap.appendChild(hint);
-    return wrap;
-  }
-
-  /** ComfyUI URL + workflow + a connection test, shown when the local backend is active. */
-  private localConfig(): HTMLElement {
-    const wrap = div('local-config');
-
-    const urlField = field('ComfyUI URL', DEFAULT_LOCAL_URL);
-    const url = urlField.input as HTMLInputElement;
-    url.value = this.gen.local?.url ?? DEFAULT_LOCAL_URL;
-
-    const wfField = field('Workflow (ComfyUI API format — keep {PROMPT} and {SEED})', '');
-    const wf = wfField.input as HTMLTextAreaElement;
-    wf.value = this.gen.local?.imageWorkflow ?? DEFAULT_LOCAL_WORKFLOW;
-    wf.rows = 6;
-    wf.spellcheck = false;
-
-    const save = () => this.handlers.setLocalConfig(url.value, wf.value);
-    url.oninput = save;
-    wf.oninput = save;
-
-    wrap.append(urlField.el, wfField.el);
-
-    const row = div('local-config-row');
-    row.appendChild(button('Test connection', '', () => this.handlers.testLocal()));
-    wrap.appendChild(row);
-
-    const hint = div('locus-gen-hint');
-    hint.innerHTML =
-      'Start ComfyUI with CORS enabled (<code>--enable-cors-header "*"</code>). Edit the workflow so <code>ckpt_name</code> matches a checkpoint you have.';
-    wrap.appendChild(hint);
+    if (this.gen.activeId === 'fal' || this.gen.activeId === 'local') {
+      const hint = div('locus-gen-hint');
+      hint.innerHTML = 'Set this pipeline’s keys/endpoint in <b>Settings</b> (the ⚙ button above).';
+      wrap.appendChild(hint);
+    }
     return wrap;
   }
 }

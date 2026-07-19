@@ -260,8 +260,8 @@ export function getBackend(id: string): GenerationBackend | null {
 
 const SETTINGS_KEY = 'mempal:generation:v1';
 
+/** App-global generation credentials. The pipeline CHOICE is per-world (in Palace). */
 export interface GenerationSettings {
-  backendId: string;
   local?: LocalConfig;
   fal?: FalConfig;
 }
@@ -273,7 +273,7 @@ export function loadGenerationSettings(): GenerationSettings {
   } catch {
     /* ignore */
   }
-  return { backendId: NONE_ID };
+  return {};
 }
 
 export function saveGenerationSettings(settings: GenerationSettings): void {
