@@ -40,6 +40,8 @@ export interface Locus {
   object_scale?: number;
   /** Per-locus mesh rotation in degrees [x, y, z] (images are billboards, unaffected). */
   object_rotation?: Vec3;
+  /** Every image/mesh ever generated or attached here — rotate between them. */
+  gallery?: Attachment[];
   /**
    * A nested palace embedded inline (self-contained). Entering it is a scene
    * transition — a full-size space can live inside a fridge. Non-Euclidean is fine.
@@ -47,6 +49,18 @@ export interface Locus {
   child_palace: Palace | null;
   /** ISO timestamp of the last review, or null. Left in the model for v2 SRS. */
   last_reviewed: string | null;
+}
+
+/** One saved representation for a locus — a generated/attached image or mesh. */
+export interface Attachment {
+  type: 'image' | 'mesh';
+  src: string;
+}
+
+/** Add an attachment to a locus's gallery (deduped by src). */
+export function addAttachment(locus: Locus, att: Attachment): void {
+  if (!locus.gallery) locus.gallery = [];
+  if (!locus.gallery.some((a) => a.type === att.type && a.src === att.src)) locus.gallery.push(att);
 }
 
 export interface Zone {

@@ -42,6 +42,8 @@ export interface EditorHandlers {
   attachMesh(id: string): void;
   setObjectScale(id: string, value: number): void;
   setObjectRotation(id: string, axis: number, value: number): void;
+  selectAttachment(id: string, index: number): void;
+  removeAttachment(id: string, index: number): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
   enterChild(id: string): void;
@@ -344,6 +346,12 @@ export class EditorPanel {
     // placeholder if no pipeline is chosen for this world).
     wrap.appendChild(this.generateControls(locus));
 
+    // Gallery: every image/mesh made or attached here — click to make it the one
+    // that represents this locus; ✕ to discard it.
+    if (locus.gallery && locus.gallery.length > 0) {
+      wrap.appendChild(this.galleryStrip(locus));
+    }
+
     // Attach your own image / 3D model (e.g. made elsewhere in fal.ai).
     const attachRow = div('locus-gen-row');
     attachRow.appendChild(button('📎 Attach image', '', () => this.handlers.attachImage(locus.id)));
@@ -457,6 +465,45 @@ export class EditorPanel {
   }
 
   /** Per-world pipeline picker. Credentials live in Settings (the gear). */
+  /** Thumbnails of every image/mesh version for this locus; click to activate. */
+  private galleryStrip(locus: Locus): HTMLElement {
+    const strip = div('gallery');
+    const title = div('locus-gen-hint');
+    title.textContent = 'Versions (click to use)';
+    strip.appendChild(title);
+
+    const grid = div('gallery-grid');
+    (locus.gallery ?? []).forEach((att, i) => {
+      const cell = div('gallery-cell');
+      const active =
+        (att.type === 'image' && locus.image_2d === att.src) || (att.type === 'mesh' && locus.mesh_3d === att.src);
+      if (active) cell.classList.add('active');
+      cell.onclick = () => this.handlers.selectAttachment(locus.id, i);
+
+      if (att.type === 'image') {
+        const img = document.createElement('img');
+        img.src = att.src;
+        cell.appendChild(img);
+      } else {
+        const badge = div('gallery-mesh');
+        badge.textContent = '3D';
+        cell.appendChild(badge);
+      }
+      const rm = document.createElement('button');
+      rm.className = 'gallery-x';
+      rm.textContent = '✕';
+      rm.title = 'remove this version';
+      rm.onclick = (e) => {
+        e.stopPropagation();
+        this.handlers.removeAttachment(locus.id, i);
+      };
+      cell.appendChild(rm);
+      grid.appendChild(cell);
+    });
+    strip.appendChild(grid);
+    return strip;
+  }
+
   private generationSection(): HTMLElement {
     const wrap = div('editor-gen');
     const title = div('ctrl-title');

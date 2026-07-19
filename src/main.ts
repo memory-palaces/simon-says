@@ -31,6 +31,7 @@ import {
   type LocalConfig,
 } from './model/generation';
 import {
+  addAttachment,
   addLocus,
   createEmptyPalace,
   DEFAULT_ASSET_ID,
@@ -150,6 +151,8 @@ class App {
       },
       attachImage: (id) => this.attachFile(id, 'image'),
       attachMesh: (id) => this.attachFile(id, 'mesh'),
+      selectAttachment: (id, i) => this.selectAttachment(id, i),
+      removeAttachment: (id, i) => this.removeAttachment(id, i),
       setObjectScale: (id, v) => this.setObjectScale(id, v),
       setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
       setStyle: (id) => this.setStyle(id),
@@ -743,7 +746,11 @@ class App {
       generate: (seed) => backend.generateImage(styledPrompt, seed),
       onGenerated: (dataUrl) => history.push(dataUrl),
       onApprove: (dataUrl) => {
+        // A newly approved image becomes the representation; the old mesh (now stale
+        // for this image) stays in the gallery so you can rotate back to it.
         locus.image_2d = dataUrl;
+        locus.mesh_3d = null;
+        addAttachment(locus, { type: 'image', src: dataUrl });
         this.loci.sync(this.palace);
         this.checkpoint();
         this.renderEditor();
@@ -774,6 +781,7 @@ class App {
     try {
       const glb = await backend.imageTo3d(locus.image_2d);
       locus.mesh_3d = glb;
+      addAttachment(locus, { type: 'mesh', src: glb });
       this.loci.sync(this.palace);
       this.checkpoint();
       this.renderEditor();
@@ -793,6 +801,35 @@ class App {
     this.renderEditor();
   }
 
+  /** Rotate the locus to a gallery item — an image (clears the mesh) or a mesh. */
+  private selectAttachment(id: string, index: number): void {
+    const locus = this.palace.loci.find((l) => l.id === id);
+    const item = locus?.gallery?.[index];
+    if (!locus || !item) return;
+    if (item.type === 'image') {
+      locus.image_2d = item.src;
+      locus.mesh_3d = null;
+    } else {
+      locus.mesh_3d = item.src;
+    }
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private removeAttachment(id: string, index: number): void {
+    const locus = this.palace.loci.find((l) => l.id === id);
+    const item = locus?.gallery?.[index];
+    if (!locus || !item) return;
+    locus.gallery!.splice(index, 1);
+    // If we removed the active representation, clear it.
+    if (item.type === 'image' && locus.image_2d === item.src) locus.image_2d = null;
+    if (item.type === 'mesh' && locus.mesh_3d === item.src) locus.mesh_3d = null;
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
   /** Attach a user-supplied image or GLB (e.g. generated elsewhere in fal.ai). */
   private async attachFile(id: string, kind: 'image' | 'mesh'): Promise<void> {
     const file = await pickFile(kind === 'image' ? 'image/*' : '.glb,.gltf,model/gltf-binary');
@@ -803,11 +840,14 @@ class App {
       const dataUrl = await fileToDataUrl(file);
       if (kind === 'image') {
         locus.image_2d = dataUrl;
+        locus.mesh_3d = null; // attached image becomes the representation
+        addAttachment(locus, { type: 'image', src: dataUrl });
         const hist = this.sessionImages.get(id) ?? [];
         hist.push(dataUrl);
         this.sessionImages.set(id, hist);
       } else {
         locus.mesh_3d = dataUrl;
+        addAttachment(locus, { type: 'mesh', src: dataUrl });
       }
       this.loci.sync(this.palace);
       this.checkpoint();

@@ -920,6 +920,67 @@ canvas {
   border: 1px solid rgba(255, 255, 255, 0.12);
   align-self: center;
 }
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 6px;
+}
+.gallery-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.3);
+}
+.gallery-cell.active {
+  border-color: var(--ui-accent);
+}
+.gallery-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gallery-mesh {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c9adff;
+  background: rgba(185, 140, 255, 0.14);
+}
+.gallery-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 9px;
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.gallery-cell:hover .gallery-x {
+  opacity: 1;
+}
+
 .mesh-preview {
   align-self: center;
   border-radius: 8px;
