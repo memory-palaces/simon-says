@@ -14,6 +14,8 @@ export interface EditorHandlers {
   reorder(id: string, dir: -1 | 1): void;
   deleteLocus(id: string): void;
   teleport(id: string): void;
+  undo(): void;
+  redo(): void;
 }
 
 /**
@@ -34,6 +36,11 @@ export class EditorPanel {
   /** A transient banner (e.g. "drop this palace's .glb"). Persists across renders. */
   private notice: string | null = null;
 
+  // Kept so history state can be toggled without a full re-render (which would
+  // drop focus while the user is mid-edit).
+  private undoBtn: HTMLButtonElement | null = null;
+  private redoBtn: HTMLButtonElement | null = null;
+
   constructor(mount: HTMLElement, handlers: EditorHandlers) {
     this.handlers = handlers;
     this.root = document.createElement('div');
@@ -53,7 +60,13 @@ export class EditorPanel {
     this.notice = text;
   }
 
-  render(palace: Palace, selectedId: string | null): void {
+  /** Update undo/redo enablement without re-rendering (preserves input focus). */
+  setHistoryState(canUndo: boolean, canRedo: boolean): void {
+    if (this.undoBtn) this.undoBtn.disabled = !canUndo;
+    if (this.redoBtn) this.redoBtn.disabled = !canRedo;
+  }
+
+  render(palace: Palace, selectedId: string | null, canUndo = false, canRedo = false): void {
     this.rowLabels.clear();
     this.rowPrompts.clear();
     this.root.replaceChildren();
@@ -79,8 +92,17 @@ export class EditorPanel {
     actions.appendChild(button('Load', '', () => this.handlers.load()));
     actions.appendChild(button('New', '', () => this.handlers.newPalace()));
     const review = button('Review ▸', '', () => this.handlers.startReview());
-    (review as HTMLButtonElement).disabled = palace.loci.length === 0;
+    review.disabled = palace.loci.length === 0;
     actions.appendChild(review);
+
+    this.undoBtn = button('↶', '', () => this.handlers.undo());
+    this.undoBtn.title = 'Undo (Ctrl/Cmd+Z)';
+    this.undoBtn.disabled = !canUndo;
+    this.redoBtn = button('↷', '', () => this.handlers.redo());
+    this.redoBtn.title = 'Redo (Ctrl/Cmd+Shift+Z)';
+    this.redoBtn.disabled = !canRedo;
+    actions.append(this.undoBtn, this.redoBtn);
+
     header.appendChild(actions);
     this.root.appendChild(header);
 
@@ -183,7 +205,7 @@ function div(className: string): HTMLElement {
   return el;
 }
 
-function button(text: string, variant: string, onClick: () => void): HTMLElement {
+function button(text: string, variant: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.className = 'btn ' + variant;
   b.textContent = text;

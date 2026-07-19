@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FirstPersonControls } from './FirstPersonControls';
 import { loadGlbFromUrl, loadGlbFromFile, type LoadedModel } from './loadGlb';
-import { DEFAULT_ASSET_ID } from '../model/palace';
+import { DEFAULT_ASSET_ID, DEFAULT_BACKGROUND, type Environment } from '../model/palace';
 
 /** A surface hit under the crosshair, in world space. */
 export interface SurfaceHit {
@@ -40,8 +40,9 @@ export class Viewer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x0a0a0b);
-    this.scene.fog = new THREE.Fog(0x0a0a0b, 60, 200);
+    const bg = new THREE.Color(DEFAULT_BACKGROUND);
+    this.scene.background = bg.clone();
+    this.scene.fog = new THREE.Fog(bg.clone(), 60, 200);
 
     this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 1000);
     this.camera.position.set(0, 1.7, 0);
@@ -147,6 +148,13 @@ export class Viewer {
       normal.copy(hit.face.normal).applyNormalMatrix(this.normalMat).normalize();
     }
     return { point: hit.point.clone(), normal };
+  }
+
+  /** Apply a palace's environment (background + fog colour), or the default. */
+  applyEnvironment(env?: Environment): void {
+    const color = new THREE.Color(env?.background || DEFAULT_BACKGROUND);
+    (this.scene.background as THREE.Color).copy(color);
+    (this.scene.fog as THREE.Fog).color.copy(color);
   }
 
   /** Point the camera at a target from a given position (used by review mode). */

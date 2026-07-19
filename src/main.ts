@@ -7,6 +7,7 @@ import { EditorPanel } from './ui/editorPanel';
 import { ReviewOverlay } from './ui/review';
 import { openPalace, readPalaceFile, savePalace } from './model/persistence';
 import { loadDraft, saveDraft } from './model/autosave';
+import { History } from './model/history';
 import {
   addLocus,
   createEmptyPalace,
@@ -48,11 +49,15 @@ class App {
 
   private draftTimer = 0;
 
+  private readonly history = new History<Palace>(100);
+  private histTimer = 0;
+  private histPending = false;
+
   constructor() {
     this.editor = new EditorPanel(this.mount, {
       renamePalace: (name) => {
         this.palace.name = name;
-        this.markDirty();
+        this.checkpointSoon();
       },
       enterWalk: () => this.enterWalk(),
       save: () => savePalace(this.palace),
@@ -61,12 +66,21 @@ class App {
       startReview: () => this.beginReview(),
       selectLocus: (id) => this.select(id),
       // rerender=false: re-rendering the panel on every keystroke would drop input
-      // focus. The panel updates the affected row text in place instead.
-      updateLabel: (id, text) => this.mutateLocus(id, (l) => (l.label = text), false),
-      updatePrompt: (id, text) => this.mutateLocus(id, (l) => (l.image_prompt = text), false),
+      // focus. The panel updates the affected row text in place instead. History is
+      // checkpointed on a debounce so one Ctrl+Z doesn't rewind character-by-character.
+      updateLabel: (id, text) => {
+        this.mutateLocus(id, (l) => (l.label = text), false);
+        this.checkpointSoon();
+      },
+      updatePrompt: (id, text) => {
+        this.mutateLocus(id, (l) => (l.image_prompt = text), false);
+        this.checkpointSoon();
+      },
       reorder: (id, dir) => this.reorder(id, dir),
       deleteLocus: (id) => this.deleteLocus(id),
       teleport: (id) => this.gotoLocus(id),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
     });
 
     this.viewer.start();
@@ -81,6 +95,7 @@ class App {
     const draft = loadDraft();
     if (draft) {
       await this.adoptPalace(draft);
+      this.history.reset(this.palace); // draft is the baseline; nothing to undo past it
       return;
     }
 
@@ -88,7 +103,9 @@ class App {
     try {
       await this.viewer.loadUrl(DEFAULT_SPACE.url);
       setAsset(this.palace, DEFAULT_SPACE.url);
+      this.viewer.applyEnvironment(this.palace.environment);
       this.loci.sync(this.palace);
+      this.history.reset(this.palace);
       this.setMode('edit');
     } catch (err) {
       console.error(err);
@@ -114,7 +131,7 @@ class App {
       this.review.hide();
       this.overlay.hide();
       this.movingId = null;
-      this.editor.render(this.palace, this.selectedId);
+      this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
       this.editor.show();
     } else {
       // review — the overlay is driven by the review flow itself.
@@ -139,6 +156,66 @@ class App {
   private flushDraft(): void {
     clearTimeout(this.draftTimer);
     saveDraft(this.palace);
+  }
+
+  // --- Undo/redo history -----------------------------------------------------
+
+  /** Record an undo checkpoint now (for discrete actions like place/delete/reorder). */
+  private checkpoint(): void {
+    this.histPending = false;
+    clearTimeout(this.histTimer);
+    this.history.push(this.palace);
+    this.markDirty();
+    this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
+  }
+
+  /** Record a checkpoint after a short pause — coalesces rapid text edits into one step. */
+  private checkpointSoon(): void {
+    this.histPending = true;
+    clearTimeout(this.histTimer);
+    this.histTimer = window.setTimeout(() => {
+      this.histPending = false;
+      this.history.push(this.palace);
+      this.markDirty();
+      this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
+    }, 700);
+  }
+
+  /** Fold any pending (debounced) text edit into the history before undoing past it. */
+  private flushCheckpoint(): void {
+    if (!this.histPending) return;
+    this.histPending = false;
+    clearTimeout(this.histTimer);
+    this.history.push(this.palace);
+  }
+
+  private undo(): void {
+    this.flushCheckpoint();
+    const snap = this.history.undo();
+    if (snap) this.applySnapshot(snap);
+  }
+
+  private redo(): void {
+    const snap = this.history.redo();
+    if (snap) this.applySnapshot(snap);
+  }
+
+  /** Replace the live palace with a restored snapshot and refresh everything. */
+  private applySnapshot(snapshot: Palace): void {
+    this.palace = snapshot;
+    if (this.selectedId && !this.palace.loci.some((l) => l.id === this.selectedId)) this.selectedId = null;
+    this.movingId = null;
+    this.targetedId = null;
+    this.loci.setTargeted(null);
+    this.loci.setSelected(this.selectedId);
+    this.loci.sync(this.palace);
+    this.viewer.applyEnvironment(this.palace.environment);
+    this.markDirty();
+    if (this.mode === 'edit') {
+      this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
+    } else {
+      this.editor.setHistoryState(this.history.canUndo(), this.history.canRedo());
+    }
   }
 
   /** Select the marker under the crosshair and drop back to the editor for it. */
@@ -224,6 +301,20 @@ class App {
   // --- Walk-mode keys --------------------------------------------------------
 
   private onKeyDown(e: KeyboardEvent): void {
+    // Undo/redo, available in every mode. While the caret is in a text field, let
+    // the browser's native text undo win instead of rewinding the whole palace.
+    if (e.ctrlKey || e.metaKey) {
+      const target = e.target as HTMLElement | null;
+      const inField = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+      const key = e.key.toLowerCase();
+      if (!inField && (key === 'z' || key === 'y')) {
+        e.preventDefault();
+        if (key === 'y' || e.shiftKey) this.redo();
+        else this.undo();
+        return;
+      }
+    }
+
     if (this.mode === 'walk') {
       if (e.code === 'KeyE') this.dropOrPlace();
       else if (e.code === 'KeyX') this.deleteTargeted();
@@ -241,6 +332,7 @@ class App {
   private dropOrPlace(): void {
     if (this.movingId) {
       this.movingId = null; // drop the grabbed one where it currently sits
+      this.checkpoint();
       return;
     }
     const hit = this.viewer.raycastSurface();
@@ -249,7 +341,7 @@ class App {
     const locus = addLocus(this.palace, local.position, local.normal);
     this.selectedId = locus.id;
     this.loci.sync(this.palace);
-    this.markDirty();
+    this.checkpoint();
   }
 
   private deleteTargeted(): void {
@@ -261,12 +353,14 @@ class App {
     removeLocus(this.palace, id);
     this.loci.setTargeted(null);
     this.loci.sync(this.palace);
-    this.markDirty();
+    this.checkpoint();
   }
 
   private toggleMove(): void {
-    if (this.movingId) this.movingId = null;
-    else if (this.targetedId) {
+    if (this.movingId) {
+      this.movingId = null;
+      this.checkpoint(); // finalise the moved position as one undo step
+    } else if (this.targetedId) {
       this.movingId = this.targetedId;
       this.selectedId = this.targetedId;
       this.loci.setSelected(this.targetedId);
@@ -275,10 +369,15 @@ class App {
 
   // --- Editor handlers -------------------------------------------------------
 
+  /** Re-render the panel, always carrying the current undo/redo enablement. */
+  private renderEditor(): void {
+    this.editor.render(this.palace, this.selectedId, this.history.canUndo(), this.history.canRedo());
+  }
+
   private select(id: string): void {
     this.selectedId = id;
     this.loci.setSelected(id);
-    this.editor.render(this.palace, this.selectedId);
+    this.renderEditor();
   }
 
   private mutateLocus(id: string, fn: (l: Locus) => void, rerender = true): void {
@@ -286,22 +385,22 @@ class App {
     if (!locus) return;
     fn(locus);
     this.markDirty();
-    if (rerender && this.mode === 'edit') this.editor.render(this.palace, this.selectedId);
+    if (rerender && this.mode === 'edit') this.renderEditor();
   }
 
   private reorder(id: string, dir: -1 | 1): void {
     reorderLocus(this.palace, id, dir);
     this.loci.sync(this.palace);
-    this.markDirty();
-    this.editor.render(this.palace, this.selectedId);
+    this.checkpoint();
+    this.renderEditor();
   }
 
   private deleteLocus(id: string): void {
     if (this.selectedId === id) this.selectedId = null;
     removeLocus(this.palace, id);
     this.loci.sync(this.palace);
-    this.markDirty();
-    this.editor.render(this.palace, this.selectedId);
+    this.checkpoint();
+    this.renderEditor();
   }
 
   private newPalace(): void {
@@ -310,9 +409,10 @@ class App {
     this.palace = createEmptyPalace(name);
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
+    this.viewer.applyEnvironment(this.palace.environment);
     this.loci.sync(this.palace);
-    this.markDirty();
-    this.editor.render(this.palace, this.selectedId);
+    this.checkpoint();
+    this.renderEditor();
   }
 
   // --- Review flow -----------------------------------------------------------
@@ -399,7 +499,7 @@ class App {
       setAsset(this.palace, file.name);
       this.editor.setNotice(null); // geometry is present now
       this.loci.sync(this.palace);
-      this.markDirty();
+      this.checkpoint();
       this.finishLoad();
     } catch (err) {
       console.error(err);
@@ -411,6 +511,7 @@ class App {
     try {
       const palace = await readPalaceFile(file);
       await this.adoptPalace(palace);
+      this.checkpoint(); // loading is undoable (recover from an accidental Load)
     } catch (err) {
       console.error(err);
       this.overlay.showError(`Couldn't read "${file.name}" as a palace file.`);
@@ -420,7 +521,10 @@ class App {
   private async loadViaPicker(): Promise<void> {
     try {
       const palace = await openPalace();
-      if (palace) await this.adoptPalace(palace);
+      if (palace) {
+        await this.adoptPalace(palace);
+        this.checkpoint();
+      }
     } catch (err) {
       console.error(err);
       this.overlay.showError('Could not open that palace file.');
@@ -431,6 +535,7 @@ class App {
   private async adoptPalace(palace: Palace): Promise<void> {
     this.palace = palace;
     this.selectedId = null;
+    this.viewer.applyEnvironment(this.palace.environment);
     const asset = palace.assets.find((a) => a.id === DEFAULT_ASSET_ID) ?? palace.assets[0];
     const file = asset?.file ?? '';
 

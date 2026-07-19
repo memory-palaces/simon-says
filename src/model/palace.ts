@@ -44,13 +44,24 @@ export interface Zone {
   name: string;
 }
 
+/** The look of the empty space around the geometry. Solid colour for now. */
+export interface Environment {
+  /** Background + fog colour as a #rrggbb hex string. */
+  background: string;
+}
+
 export interface Palace {
   version: 1;
   name: string;
   assets: Asset[];
   loci: Locus[];
   zones: Zone[];
+  /** Optional so older palace files still load; defaults applied on read. */
+  environment?: Environment;
 }
+
+/** A dark slate instead of pure black — less "abyss", still lets geometry pop. */
+export const DEFAULT_BACKGROUND = '#20242c';
 
 export const IDENTITY_MAT4: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -66,7 +77,7 @@ function uid(prefix: string): string {
 }
 
 export function createEmptyPalace(name = 'Untitled palace'): Palace {
-  return { version: 1, name, assets: [], loci: [], zones: [] };
+  return { version: 1, name, assets: [], loci: [], zones: [], environment: { background: DEFAULT_BACKGROUND } };
 }
 
 /** Register (or replace) the geometry asset a palace's loci are anchored to. */
