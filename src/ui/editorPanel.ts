@@ -40,6 +40,7 @@ export interface EditorHandlers {
   setFalModel(model: string): void;
   enterChild(id: string): void;
   removeChild(id: string): void;
+  renameChild(id: string, name: string): void;
   returnToParent(): void;
 }
 
@@ -227,12 +228,6 @@ export class EditorPanel {
     // --- This world: image pipeline + background -------------------------------
     this.root.appendChild(this.generationSection());
     this.root.appendChild(this.worldSection(palace));
-
-    // --- Core-principle note ---------------------------------------------------
-    const note = div('editor-note');
-    note.innerHTML =
-      'Write the mnemonic image yourself — the weirder the better. This tool renders your idea; it never invents one for you.';
-    this.root.appendChild(note);
   }
 
   /** Background colour picker + preset swatches; changes apply live and are undoable. */
@@ -339,14 +334,22 @@ export class EditorPanel {
     }
 
     // Nested child palace: a whole space you can step into at this locus.
-    const childRow = div('locus-gen-row');
     if (locus.child_palace) {
-      childRow.appendChild(button('↳ Enter inner palace', '', () => this.handlers.enterChild(locus.id)));
-      childRow.appendChild(iconButton('🗑', 'remove inner palace', () => this.handlers.removeChild(locus.id)));
+      const nameField = field('Inner palace', 'name this inner space');
+      const nm = nameField.input as HTMLInputElement;
+      nm.value = locus.child_palace.name;
+      nm.oninput = () => this.handlers.renameChild(locus.id, nm.value);
+      wrap.appendChild(nameField.el);
+
+      const row = div('locus-gen-row');
+      row.appendChild(button('↳ Enter', '', () => this.handlers.enterChild(locus.id)));
+      row.appendChild(iconButton('🗑', 'remove inner palace', () => this.handlers.removeChild(locus.id)));
+      wrap.appendChild(row);
     } else {
-      childRow.appendChild(button('➕ Add inner palace', '', () => this.handlers.enterChild(locus.id)));
+      const row = div('locus-gen-row');
+      row.appendChild(button('➕ Add inner palace', '', () => this.handlers.enterChild(locus.id)));
+      wrap.appendChild(row);
     }
-    wrap.appendChild(childRow);
 
     return wrap;
   }

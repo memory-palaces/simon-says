@@ -144,6 +144,7 @@ class App {
       setFalModel: (model) => this.setFalModel(model),
       enterChild: (id) => this.enterChild(id),
       removeChild: (id) => this.removeChild(id),
+      renameChild: (id, name) => this.renameChild(id, name),
       returnToParent: () => this.returnToParent(),
     });
     this.syncGeneration();
@@ -216,6 +217,9 @@ class App {
   }
 
   private enterWalk(): void {
+    // Enter flying so clicking in never drops you off a ledge / into the void —
+    // you keep exactly the vantage you had. Press F for gravity-walk.
+    this.viewer.fp.setFlying(true);
     if (!this.viewer.fp.locked) this.viewer.fp.lock();
   }
 
@@ -358,6 +362,23 @@ class App {
     this.toasts.info(on ? 'X-ray on — all pins show through walls' : 'X-ray off — pins hidden behind walls');
   }
 
+  /** Walk-mode click on the targeted marker: enter its inner palace, or edit it. */
+  private clickTargeted(): void {
+    if (!this.targetedId) return;
+    const locus = this.palace.loci.find((l) => l.id === this.targetedId);
+    if (locus?.child_palace) void this.enterChild(this.targetedId);
+    else this.openTargetedInEditor();
+  }
+
+  /** Mouse-wheel dolly along the view direction (quick zoom), scaled to the player. */
+  private onWheel(e: WheelEvent): void {
+    if (!this.viewer.fp.locked) return; // let the editor panel scroll normally
+    e.preventDefault();
+    this.viewer.camera.getWorldDirection(this.scratchA);
+    const step = -e.deltaY * 0.02 * (this.viewer.fp.eyeOffset / 1.7);
+    this.viewer.camera.position.addScaledVector(this.scratchA, step);
+  }
+
   /** Select the marker under the crosshair and drop back to the editor for it. */
   private openTargetedInEditor(): void {
     if (!this.targetedId) return;
@@ -375,12 +396,20 @@ class App {
       if (this.mode === 'walk') this.setMode('edit');
     });
 
+    const canvas = this.viewer.renderer.domElement;
     // Click the 3D view to start walking; while walking, click a marker you're
-    // looking at to jump straight to its editor.
-    this.viewer.renderer.domElement.addEventListener('click', () => {
+    // looking at — a doorway pin enters its inner palace, otherwise open its editor.
+    canvas.addEventListener('click', () => {
       if (this.mode === 'edit') this.enterWalk();
-      else if (this.mode === 'walk' && this.targetedId && !this.movingId) this.openTargetedInEditor();
+      else if (this.mode === 'walk' && this.targetedId && !this.movingId) this.clickTargeted();
     });
+    // Right-click releases the mouse (like Esc), so you don't have to reach for it.
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 2 && this.viewer.fp.locked) this.viewer.fp.controls.unlock();
+    });
+    // Mouse wheel dollies along the view direction — a quick zoom in/out.
+    canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('dragover', (e) => {
@@ -844,7 +873,7 @@ class App {
       }
     }
     this.loci.sync(this.palace);
-    if (this.mode === 'edit') this.renderEditor();
+    // Callers render AFTER updateReturnUi so the breadcrumb/Return bar is fresh.
   }
 
   /** Fade to black, run the scene swap, fade back — like stepping through a door. */
@@ -879,6 +908,7 @@ class App {
       await this.enterPalaceGeometry();
     });
     this.updateReturnUi();
+    if (this.mode === 'edit') this.renderEditor();
     this.toasts.info(`Entered “${this.palace.name}” — Backspace to return`);
   }
 
@@ -895,6 +925,7 @@ class App {
       this.viewer.camera.quaternion.copy(frame.camQuat);
     });
     this.updateReturnUi();
+    if (this.mode === 'edit') this.renderEditor();
   }
 
   private removeChild(locusId: string): void {
@@ -903,6 +934,13 @@ class App {
     locus.child_palace = null;
     this.checkpoint();
     this.renderEditor();
+  }
+
+  private renameChild(locusId: string, name: string): void {
+    const locus = this.palace.loci.find((l) => l.id === locusId);
+    if (!locus?.child_palace) return;
+    locus.child_palace.name = name;
+    this.checkpointSoon(); // no re-render: keep focus in the field
   }
 
   /** Tell the panel how deep we are so it can show a Return / breadcrumb bar. */
@@ -947,7 +985,9 @@ class App {
       return;
     }
     if (this.palace.loci.length === 0) {
-      await this.newPalaceWithGeometry(file);
+      // No loci yet: just set this palace's geometry, keeping the name the user
+      // already chose. (A GLB filename shouldn't rename their project.)
+      await this.swapGeometry(file);
       return;
     }
     const n = this.palace.loci.length;

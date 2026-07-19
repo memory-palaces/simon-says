@@ -44,7 +44,7 @@ export class Viewer {
     this.scene.background = bg.clone();
     this.scene.fog = new THREE.Fog(bg.clone(), 60, 200);
 
-    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 1000);
+    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 4000);
     this.camera.position.set(0, 1.7, 0);
 
     this.addLights();
@@ -58,13 +58,13 @@ export class Viewer {
   private hemi!: THREE.HemisphereLight;
   private key!: THREE.DirectionalLight;
   private headlamp!: THREE.PointLight;
-  private readonly baseHemi = 1.4;
-  private readonly baseKey = 2.2;
-  private readonly baseHeadlamp = 12;
+  private readonly baseHemi = 2.4;
+  private readonly baseKey = 2.6;
+  private readonly baseHeadlamp = 10;
 
   private addLights(): void {
-    // Sky/ground hemisphere gives interiors a believable fill without an HDRI.
-    this.hemi = new THREE.HemisphereLight(0xdbe6ff, 0x4a443c, this.baseHemi);
+    // Bright sky/ground hemisphere for a daylight feel without an HDRI.
+    this.hemi = new THREE.HemisphereLight(0xeaf0ff, 0x8a8375, this.baseHemi);
     this.scene.add(this.hemi);
 
     const key = new THREE.DirectionalLight(0xfff2d6, this.baseKey);
@@ -107,10 +107,11 @@ export class Viewer {
 
     this.fp.setColliders(model.scene, model.bounds);
 
-    // Fog distance should track the size of the space so big scenes don't clip.
+    // Keep fog very far out so zooming back to see the whole scene doesn't fade it
+    // to darkness — it's just a soft distance cue, not "nighttime".
     const reach = Math.max(model.size.x, model.size.z);
-    (this.scene.fog as THREE.Fog).near = reach * 0.6;
-    (this.scene.fog as THREE.Fog).far = reach * 2.2;
+    (this.scene.fog as THREE.Fog).near = reach * 2;
+    (this.scene.fog as THREE.Fog).far = reach * 10;
 
     this.spawnInside(model);
   }
