@@ -145,6 +145,23 @@ export class LociLayer {
       return;
     }
     const obj = gltf.scene;
+    // Generated meshes (esp. from image-to-3D) look dull/dark under interior light.
+    // Make them partly self-lit from their own texture so they keep the vibrancy of
+    // the 2D image the user approved, without going fully unlit (which reads flat).
+    obj.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        const mat = o.material;
+        const mats = Array.isArray(mat) ? mat : [mat];
+        for (const m of mats) {
+          if (m instanceof THREE.MeshStandardMaterial) {
+            if (m.map) m.emissiveMap = m.map;
+            m.emissive = new THREE.Color(0xffffff);
+            m.emissiveIntensity = 0.45;
+            m.needsUpdate = true;
+          }
+        }
+      }
+    });
     // Normalise: fit the mesh into ~0.8 units and sit it just above the marker.
     const box = new THREE.Box3().setFromObject(obj);
     const size = new THREE.Vector3();

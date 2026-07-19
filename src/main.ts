@@ -32,6 +32,7 @@ import {
   addLocus,
   createEmptyPalace,
   DEFAULT_ASSET_ID,
+  DEFAULT_BACKGROUND,
   lociInOrder,
   removeLocus,
   reorderLocus,
@@ -118,6 +119,7 @@ class App {
       undo: () => this.undo(),
       redo: () => this.redo(),
       setBackground: (hex) => this.setBackground(hex),
+      setBrightness: (v) => this.setBrightness(v),
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
       clearImage: (id) => this.clearImage(id),
@@ -493,10 +495,17 @@ class App {
   }
 
   private setBackground(hex: string): void {
-    this.palace.environment = { background: hex };
+    this.palace.environment = { ...this.palace.environment, background: hex };
     this.viewer.applyEnvironment(this.palace.environment);
     this.markDirty();
     this.checkpointSoon(); // coalesce colour-picker dragging into one undo step
+  }
+
+  private setBrightness(value: number): void {
+    this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), brightness: value };
+    this.viewer.setBrightness(value);
+    this.markDirty();
+    this.checkpointSoon(); // coalesce slider dragging into one undo step
   }
 
   // --- Generation ------------------------------------------------------------

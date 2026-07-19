@@ -29,6 +29,7 @@ export interface EditorHandlers {
   undo(): void;
   redo(): void;
   setBackground(hex: string): void;
+  setBrightness(value: number): void;
   setBackendId(id: string): void;
   generate(id: string): void;
   clearImage(id: string): void;
@@ -248,6 +249,21 @@ export class EditorPanel {
       row.appendChild(sw);
     }
     wrap.appendChild(row);
+
+    // Brightness — lifts dark interiors (scales all lights + the headlamp).
+    const brightRow = div('bright-row');
+    const brightLabel = document.createElement('span');
+    brightLabel.className = 'bright-label';
+    brightLabel.textContent = 'Brightness';
+    const bright = document.createElement('input');
+    bright.type = 'range';
+    bright.min = '0.3';
+    bright.max = '3';
+    bright.step = '0.1';
+    bright.value = String(palace.environment?.brightness ?? 1);
+    bright.oninput = () => this.handlers.setBrightness(parseFloat(bright.value));
+    brightRow.append(brightLabel, bright);
+    wrap.appendChild(brightRow);
     return wrap;
   }
 

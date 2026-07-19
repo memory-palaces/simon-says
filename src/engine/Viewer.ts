@@ -54,12 +54,20 @@ export class Viewer {
     window.addEventListener('resize', this.onResize);
   }
 
-  private addLights(): void {
-    // Soft ambient so nothing is pure black, plus one key light casting shadows.
-    // Sky/ground hemisphere gives interiors a believable fill without HDRI setup.
-    this.scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x2b2620, 1.1));
+  // Lights, kept so a per-world brightness multiplier can scale them.
+  private hemi!: THREE.HemisphereLight;
+  private key!: THREE.DirectionalLight;
+  private headlamp!: THREE.PointLight;
+  private readonly baseHemi = 1.4;
+  private readonly baseKey = 2.2;
+  private readonly baseHeadlamp = 12;
 
-    const key = new THREE.DirectionalLight(0xfff2d6, 2.2);
+  private addLights(): void {
+    // Sky/ground hemisphere gives interiors a believable fill without an HDRI.
+    this.hemi = new THREE.HemisphereLight(0xdbe6ff, 0x4a443c, this.baseHemi);
+    this.scene.add(this.hemi);
+
+    const key = new THREE.DirectionalLight(0xfff2d6, this.baseKey);
     key.position.set(30, 60, 20);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -72,6 +80,20 @@ export class Viewer {
     key.shadow.camera.bottom = -s;
     key.shadow.bias = -0.0004;
     this.scene.add(key);
+    this.key = key;
+
+    // A headlamp on the camera lights whatever you're looking at — the reliable
+    // fix for pitch-dark interiors the sun/sky can't reach.
+    this.headlamp = new THREE.PointLight(0xffffff, this.baseHeadlamp, 25, 2);
+    this.camera.add(this.headlamp);
+  }
+
+  /** Scale all lights by a per-world factor (1 = default). */
+  setBrightness(factor: number): void {
+    const f = Math.max(0.1, factor);
+    this.hemi.intensity = this.baseHemi * f;
+    this.key.intensity = this.baseKey * f;
+    this.headlamp.intensity = this.baseHeadlamp * f;
   }
 
   /** Replace whatever model is loaded with a new one and drop the walker into it. */
@@ -204,6 +226,7 @@ export class Viewer {
     const color = new THREE.Color(env?.background || DEFAULT_BACKGROUND);
     (this.scene.background as THREE.Color).copy(color);
     (this.scene.fog as THREE.Fog).color.copy(color);
+    this.setBrightness(env?.brightness ?? 1);
   }
 
   /** Point the camera at a target from a given position (used by review mode). */

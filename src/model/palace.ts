@@ -48,6 +48,8 @@ export interface Zone {
 export interface Environment {
   /** Background + fog colour as a #rrggbb hex string. */
   background: string;
+  /** Global light multiplier (1 = default). Brightens dark interiors. */
+  brightness?: number;
 }
 
 /** Which generation pipeline THIS world uses. Credentials live in app settings. */

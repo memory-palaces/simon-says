@@ -289,6 +289,21 @@ canvas {
   outline: 2px solid var(--ui-accent);
   outline-offset: 1px;
 }
+.bright-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.bright-label {
+  font-size: 12px;
+  color: var(--ui-dim);
+  min-width: 68px;
+}
+.bright-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--ui-accent);
+}
 
 .editor-controls {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
