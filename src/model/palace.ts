@@ -50,6 +50,11 @@ export interface Environment {
   background: string;
 }
 
+/** Which generation pipeline THIS world uses. Credentials live in app settings. */
+export interface WorldGeneration {
+  backendId: string;
+}
+
 export interface Palace {
   version: 1;
   name: string;
@@ -58,6 +63,8 @@ export interface Palace {
   zones: Zone[];
   /** Optional so older palace files still load; defaults applied on read. */
   environment?: Environment;
+  /** Which image pipeline this world uses (credentials are app-global). */
+  generation?: WorldGeneration;
 }
 
 /** A dark slate instead of pure black — less "abyss", still lets geometry pop. */

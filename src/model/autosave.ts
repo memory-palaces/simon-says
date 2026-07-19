@@ -11,9 +11,20 @@ const KEY = 'mempal:draft:v1';
 export function saveDraft(palace: Palace): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(palace));
+    return;
   } catch {
-    // localStorage can throw (private mode, quota). A failed autosave must never
-    // break the app — the user still has explicit Save.
+    // Likely quota: an embedded GLB can be several MB, past the localStorage cap.
+  }
+  // Fall back to a light draft without the heavy embedded geometry, so the loci
+  // and mnemonics still survive a refresh even if the model can't be autosaved.
+  try {
+    const light: Palace = {
+      ...palace,
+      assets: palace.assets.map((a) => (a.file.startsWith('data:') ? { ...a, file: '' } : a)),
+    };
+    localStorage.setItem(KEY, JSON.stringify(light));
+  } catch {
+    // Private mode / still too big — give up quietly; explicit Save still works.
   }
 }
 

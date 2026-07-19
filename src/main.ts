@@ -1,6 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import { Viewer } from './engine/Viewer';
+import { fileToDataUrl } from './engine/loadGlb';
 import { LociLayer } from './engine/Loci';
 import { Overlay } from './ui/overlay';
 import { EditorPanel } from './ui/editorPanel';
@@ -543,10 +544,12 @@ class App {
 
   private async newPalace(): Promise<void> {
     if (!(await this.confirmDiscard('Start a new palace?'))) return;
-    const name = this.palace.name;
-    this.palace = createEmptyPalace(name);
+    // A fresh palace gets a fresh name (not the previous one's) but keeps the model
+    // currently loaded so you can start placing loci right away.
+    this.palace = createEmptyPalace();
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
+    this.editor.setNotice(null); // clear any stale "drag the geometry" message
     this.viewer.applyEnvironment(this.palace.environment);
     this.loci.sync(this.palace);
     this.history.reset(this.palace);
@@ -666,8 +669,10 @@ class App {
   private async swapGeometry(file: File): Promise<void> {
     this.overlay.showLoading(file.name);
     try {
-      await this.viewer.loadFile(file);
-      setAsset(this.palace, file.name);
+      // Embed the GLB as a data URL so the palace stays self-contained.
+      const dataUrl = await fileToDataUrl(file);
+      await this.viewer.loadUrl(dataUrl);
+      setAsset(this.palace, dataUrl);
       this.editor.setNotice(null);
       this.loci.sync(this.palace);
       this.checkpoint();
@@ -682,11 +687,12 @@ class App {
   private async newPalaceWithGeometry(file: File): Promise<void> {
     this.overlay.showLoading(file.name);
     try {
+      const dataUrl = await fileToDataUrl(file);
       this.palace = createEmptyPalace(baseName(file.name));
       this.selectedId = null;
       this.viewer.applyEnvironment(this.palace.environment);
-      await this.viewer.loadFile(file);
-      setAsset(this.palace, file.name);
+      await this.viewer.loadUrl(dataUrl);
+      setAsset(this.palace, dataUrl);
       this.editor.setNotice(null);
       this.loci.sync(this.palace);
       this.history.reset(this.palace);
@@ -729,9 +735,10 @@ class App {
     const asset = palace.assets.find((a) => a.id === DEFAULT_ASSET_ID) ?? palace.assets[0];
     const file = asset?.file ?? '';
 
-    // Try to auto-load bundled/URL assets; a bare dropped filename can't be fetched.
+    // Auto-load embedded (data:) or fetchable (http/relative/bundled) assets. Only a
+    // bare filename from an older, non-self-contained palace can't be resolved.
     this.editor.setNotice(null);
-    if (/^(https?:|\.?\/|assets\/)/.test(file)) {
+    if (/^(data:|https?:|\.?\/|assets\/)/.test(file)) {
       this.overlay.showLoading(file);
       try {
         await this.viewer.loadUrl(file);
@@ -740,6 +747,9 @@ class App {
       }
     } else if (file) {
       this.editor.setNotice(`Palace "${palace.name}" loaded. Now drag its geometry file ("${file}") onto the window to see the markers.`);
+    } else if (this.palace.loci.length > 0) {
+      // Stripped autosave draft: the model was too large to keep in the browser.
+      this.editor.setNotice('The model was too large to autosave. Re-drop the .glb, or load your saved .json to restore it.');
     }
     this.loci.sync(this.palace);
     this.markDirty(); // autosave the loaded palace as the current draft

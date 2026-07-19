@@ -32,6 +32,20 @@ export async function loadGlbFromFile(file: File): Promise<LoadedModel> {
   }
 }
 
+/**
+ * Read a dropped GLB into a data URL so it can be embedded in the palace JSON.
+ * That makes a saved palace self-contained: loading it brings the geometry with
+ * it, instead of asking the user to re-drop the file (a confusing two-step load).
+ */
+export function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function finalize(scene: THREE.Group): LoadedModel {
   // Make every surface a shadow participant and ensure normals exist for raycasts.
   scene.traverse((obj) => {
