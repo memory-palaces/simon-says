@@ -1,4 +1,5 @@
-import { DEFAULT_BACKGROUND, lociInOrder, type Palace } from '../model/palace';
+import { DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
+import { NONE_ID } from '../model/generation';
 
 /** Everything the panel needs to call back into the app. */
 export interface EditorHandlers {
@@ -17,6 +18,9 @@ export interface EditorHandlers {
   undo(): void;
   redo(): void;
   setBackground(hex: string): void;
+  setBackendId(id: string): void;
+  generate(id: string): void;
+  clearImage(id: string): void;
 }
 
 /**
@@ -42,6 +46,12 @@ export class EditorPanel {
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
 
+  /** Active generation backend + the choices, for the picker and per-locus buttons. */
+  private gen: { options: Array<{ id: string; label: string }>; activeId: string } = {
+    options: [{ id: NONE_ID, label: 'None (text only)' }],
+    activeId: NONE_ID,
+  };
+
   constructor(mount: HTMLElement, handlers: EditorHandlers) {
     this.handlers = handlers;
     this.root = document.createElement('div');
@@ -59,6 +69,10 @@ export class EditorPanel {
 
   setNotice(text: string | null): void {
     this.notice = text;
+  }
+
+  setGeneration(options: Array<{ id: string; label: string }>, activeId: string): void {
+    this.gen = { options, activeId };
   }
 
   /** Update undo/redo enablement without re-rendering (preserves input focus). */
@@ -153,10 +167,13 @@ export class EditorPanel {
 
       // Inline detail editor for the selected locus.
       if (locus.id === selectedId) {
-        list.appendChild(this.detail(locus.id, locus.label, locus.image_prompt));
+        list.appendChild(this.detail(locus));
       }
     }
     this.root.appendChild(list);
+
+    // --- Generation backend ----------------------------------------------------
+    this.root.appendChild(this.generationSection());
 
     // --- World background ------------------------------------------------------
     this.root.appendChild(this.worldSection(palace));
@@ -224,12 +241,13 @@ export class EditorPanel {
     return wrap;
   }
 
-  private detail(id: string, label: string, prompt: string): HTMLElement {
+  private detail(locus: Locus): HTMLElement {
+    const id = locus.id;
     const wrap = div('locus-detail');
 
     const lblField = field('Location cue', 'Where is it? e.g. "Kitchen island, north corner"');
     const lbl = lblField.input as HTMLInputElement;
-    lbl.value = label;
+    lbl.value = locus.label;
     lbl.oninput = () => {
       this.handlers.updateLabel(id, lbl.value);
       const row = this.rowLabels.get(id);
@@ -242,7 +260,7 @@ export class EditorPanel {
 
     const prField = field('Your mnemonic image', 'e.g. "a screaming lobster wearing my grandmother\'s reading glasses"', true);
     const pr = prField.input as HTMLTextAreaElement;
-    pr.value = prompt;
+    pr.value = locus.image_prompt;
     pr.oninput = () => {
       this.handlers.updatePrompt(id, pr.value);
       const row = this.rowPrompts.get(id);
@@ -253,6 +271,57 @@ export class EditorPanel {
     };
     wrap.appendChild(prField.el);
 
+    // Rendering controls only appear when a generation backend is active.
+    if (this.gen.activeId !== NONE_ID) {
+      wrap.appendChild(this.generateControls(locus));
+    }
+
+    return wrap;
+  }
+
+  /** Generate / regenerate / clear the rendered image for one locus. */
+  private generateControls(locus: Locus): HTMLElement {
+    const wrap = div('locus-gen');
+    if (!locus.image_prompt.trim()) {
+      const hint = div('locus-gen-hint');
+      hint.textContent = 'Write your mnemonic image above, then render it.';
+      wrap.appendChild(hint);
+      return wrap;
+    }
+
+    const row = div('locus-gen-row');
+    row.appendChild(button(locus.image_2d ? '↻ Regenerate' : '✦ Render image', '', () => this.handlers.generate(locus.id)));
+    if (locus.image_2d) {
+      row.appendChild(iconButton('🗑', 'remove image', () => this.handlers.clearImage(locus.id)));
+    }
+    wrap.appendChild(row);
+
+    if (locus.image_2d) {
+      const thumb = document.createElement('img');
+      thumb.className = 'locus-thumb';
+      thumb.src = locus.image_2d;
+      wrap.appendChild(thumb);
+    }
+    return wrap;
+  }
+
+  private generationSection(): HTMLElement {
+    const wrap = div('editor-gen');
+    const title = div('ctrl-title');
+    title.textContent = 'Image generation';
+    wrap.appendChild(title);
+
+    const select = document.createElement('select');
+    select.className = 'gen-select';
+    for (const opt of this.gen.options) {
+      const o = document.createElement('option');
+      o.value = opt.id;
+      o.textContent = opt.label;
+      if (opt.id === this.gen.activeId) o.selected = true;
+      select.appendChild(o);
+    }
+    select.onchange = () => this.handlers.setBackendId(select.value);
+    wrap.appendChild(select);
     return wrap;
   }
 }

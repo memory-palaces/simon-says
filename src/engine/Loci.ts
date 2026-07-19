@@ -19,6 +19,9 @@ interface Marker {
   halo: THREE.Sprite;
   label: THREE.Sprite;
   order: number;
+  /** Billboard of the generated 2D image, shown above the marker when present. */
+  image?: THREE.Sprite;
+  imageSrc?: string;
 }
 
 /**
@@ -63,6 +66,7 @@ export class LociLayer {
         marker.label.material.map = this.numberTexture(locus.order);
         marker.label.material.needsUpdate = true;
       }
+      this.updateImage(marker, locus.image_2d);
     }
     // Drop markers whose loci are gone.
     for (const [id, marker] of this.markers) {
@@ -82,6 +86,32 @@ export class LociLayer {
     this.n.transformDirection(root.matrixWorld).normalize();
     // Nudge the marker just off the surface so it doesn't z-fight the wall/floor.
     marker.group.position.copy(this.v).addScaledVector(this.n, 0.06);
+  }
+
+  /** Show (or hide) the generated 2D image as a billboard above the marker. */
+  private updateImage(marker: Marker, src: string | null): void {
+    if (src && marker.imageSrc !== src) {
+      marker.imageSrc = src;
+      const tex = new THREE.TextureLoader().load(src);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      if (!marker.image) {
+        marker.image = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }),
+        );
+        marker.image.scale.setScalar(0.9);
+        marker.image.position.y = 1.0;
+        marker.group.add(marker.image);
+      } else {
+        const mat = marker.image.material as THREE.SpriteMaterial;
+        mat.map?.dispose();
+        mat.map = tex;
+        mat.needsUpdate = true;
+      }
+      marker.image.visible = true;
+    } else if (!src && marker.image) {
+      marker.image.visible = false;
+      marker.imageSrc = undefined;
+    }
   }
 
   setSelected(id: string | null): void {

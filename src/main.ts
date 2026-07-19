@@ -8,6 +8,15 @@ import { ReviewOverlay } from './ui/review';
 import { openPalace, readPalaceFile, savePalace } from './model/persistence';
 import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
+import { GenerateDialog } from './ui/generateDialog';
+import {
+  getBackend,
+  listBackends,
+  loadGenerationSettings,
+  NONE_ID,
+  saveGenerationSettings,
+  type GenerationSettings,
+} from './model/generation';
 import {
   addLocus,
   createEmptyPalace,
@@ -32,6 +41,9 @@ class App {
   private readonly overlay = new Overlay(this.mount);
   private readonly editor: EditorPanel;
   private readonly review = new ReviewOverlay(this.mount);
+  private readonly generateDialog = new GenerateDialog(this.mount);
+
+  private genSettings: GenerationSettings = loadGenerationSettings();
 
   private palace: Palace = createEmptyPalace('My palace');
   private mode: Mode = 'edit';
@@ -82,7 +94,11 @@ class App {
       undo: () => this.undo(),
       redo: () => this.redo(),
       setBackground: (hex) => this.setBackground(hex),
+      setBackendId: (id) => this.setBackendId(id),
+      generate: (id) => this.generateFor(id),
+      clearImage: (id) => this.clearImage(id),
     });
+    this.editor.setGeneration(this.backendOptions(), this.genSettings.backendId);
 
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
@@ -409,6 +425,46 @@ class App {
     this.viewer.applyEnvironment(this.palace.environment);
     this.markDirty();
     this.checkpointSoon(); // coalesce colour-picker dragging into one undo step
+  }
+
+  // --- Generation ------------------------------------------------------------
+
+  private backendOptions(): Array<{ id: string; label: string }> {
+    return [{ id: NONE_ID, label: 'None (text only)' }, ...listBackends().map((b) => ({ id: b.id, label: b.label }))];
+  }
+
+  private setBackendId(id: string): void {
+    this.genSettings = { backendId: id };
+    saveGenerationSettings(this.genSettings);
+    this.editor.setGeneration(this.backendOptions(), id);
+    this.renderEditor();
+  }
+
+  /** Render the locus's own words to a 2D image via the active backend, verbatim. */
+  private generateFor(id: string): void {
+    const backend = getBackend(this.genSettings.backendId);
+    if (!backend) return;
+    const locus = this.palace.loci.find((l) => l.id === id);
+    if (!locus || !locus.image_prompt.trim()) return;
+
+    this.generateDialog.open(locus.image_prompt, {
+      generate: (seed) => backend.generateImage(locus.image_prompt, seed),
+      onApprove: (dataUrl) => {
+        locus.image_2d = dataUrl;
+        this.loci.sync(this.palace);
+        this.checkpoint();
+        this.renderEditor();
+      },
+    });
+  }
+
+  private clearImage(id: string): void {
+    const locus = this.palace.loci.find((l) => l.id === id);
+    if (!locus) return;
+    locus.image_2d = null;
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
   }
 
   private newPalace(): void {
