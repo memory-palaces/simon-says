@@ -1202,11 +1202,40 @@ class App {
 
   private async onDrop(e: DragEvent): Promise<void> {
     e.preventDefault();
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return;
-    if (/\.(glb|gltf)$/i.test(file.name)) await this.onGlbDrop(file);
-    else if (/\.json$/i.test(file.name)) await this.loadPalaceFile(file);
-    else this.overlay.showError(`"${file.name}" isn't a .glb, .gltf, or .json file.`);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    const glbs = files.filter((f) => /\.(glb|gltf)$/i.test(f.name));
+    const json = files.find((f) => /\.json$/i.test(f.name));
+    if (glbs.length > 1) await this.onMultiGlbDrop(glbs);
+    else if (glbs.length === 1) await this.onGlbDrop(glbs[0]);
+    else if (json) await this.loadPalaceFile(json);
+    else this.overlay.showError(`Drop a .glb, .gltf, or .json file.`);
+  }
+
+  /** Drop several models at once: each becomes its own world, linked by a portal. */
+  private async onMultiGlbDrop(files: File[]): Promise<void> {
+    this.overlay.showLoading(`${files.length} models`);
+    try {
+      const n = files.length;
+      let i = 0;
+      for (const file of files) {
+        const dataUrl = await fileToDataUrl(file);
+        const child = createEmptyPalace(baseName(file.name));
+        if (this.palace.generation) child.generation = { ...this.palace.generation };
+        setAsset(child, dataUrl);
+        // Spread the portals in a row in front of the origin so they don't overlap.
+        const portal = addPortal(this.palace, [(i - (n - 1) / 2) * 2.6, 1.3, -3], [0, 0, 1]);
+        portal.label = baseName(file.name);
+        portal.target = child;
+        i++;
+      }
+      this.loci.sync(this.palace);
+      this.checkpoint();
+      this.finishLoad();
+      this.toasts.success(`Added ${n} worlds as portals — press M for the map`);
+    } catch (err) {
+      console.error(err);
+      this.overlay.showError('Could not load one of the models.');
+    }
   }
 
   /**
