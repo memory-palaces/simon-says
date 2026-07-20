@@ -481,7 +481,7 @@ class App {
     const title = escapeHtml(t.label || `Locus ${t.order}`);
     const notes = t.notes?.trim();
     const notesHtml = notes ? `<div class="tt-notes">${escapeHtml(notes.slice(0, 140))}${notes.length > 140 ? '…' : ''}</div>` : '';
-    const door = t.child_palace ? '<div class="tt-door">↳ inner palace — Enter</div>' : '';
+    const door = t.child_palace ? '<div class="tt-door">↳ inner world — Enter</div>' : '';
     this.overlay.setTooltip(`<div class="tt-title">${title}</div>${notesHtml}${door}`);
   }
 

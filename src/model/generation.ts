@@ -324,7 +324,9 @@ export class FalBackend implements GenerationBackend {
 const BACKENDS: GenerationBackend[] = [new PlaceholderBackend(), new FalBackend(), new LocalComfyBackend()];
 
 export function listBackends(): GenerationBackend[] {
-  return BACKENDS;
+  // The offline placeholder is hidden from the picker — it's only the silent
+  // fallback when a world has no real pipeline chosen (so Render always works).
+  return BACKENDS.filter((b) => b.id !== 'placeholder');
 }
 
 export function getBackend(id: string): GenerationBackend | null {

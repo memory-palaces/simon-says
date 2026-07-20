@@ -138,6 +138,7 @@ export class SettingsDialog {
       <span>Return to parent world</span><span>Backspace</span>
       <span>Open locus editor</span><span>click a marker</span>
       <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
+      <span>Previous / next locus</span><span>[ / ]</span>
       <span>Go to a locus</span><span>Ctrl/Cmd+G</span>
       <span>Back to editor</span><span>Esc</span>`;
     wrap.appendChild(grid);
