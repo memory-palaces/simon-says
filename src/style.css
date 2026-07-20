@@ -442,6 +442,20 @@ canvas {
   color: #c9adff;
   margin-right: 4px;
 }
+.portal-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(185, 140, 255, 0.08);
+  border: 1px solid rgba(185, 140, 255, 0.3);
+  border-radius: 6px;
+  color: var(--ui-fg);
+  font-size: 13px;
+  padding: 5px 8px;
+  outline: none;
+}
+.portal-name:focus {
+  border-color: #c9adff;
+}
 .rot-num {
   width: 54px;
   background: rgba(255, 255, 255, 0.06);

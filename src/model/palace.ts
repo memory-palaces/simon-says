@@ -63,6 +63,52 @@ export function addAttachment(locus: Locus, att: Attachment): void {
   if (!locus.gallery.some((a) => a.type === att.type && a.src === att.src)) locus.gallery.push(att);
 }
 
+/**
+ * A first-class portal: a placeable doorway that leads to another world. Not tied
+ * to a locus — you can put one anywhere; place it beside a locus if you want to
+ * associate them, but you don't have to.
+ */
+export interface Portal {
+  id: string;
+  asset_id: string;
+  local_position: Vec3;
+  local_normal: Vec3;
+  label: string;
+  /** The world this portal leads to (embedded), created lazily on first entry. */
+  target: Palace | null;
+}
+
+export function addPortal(palace: Palace, localPosition: Vec3, localNormal: Vec3, assetId = DEFAULT_ASSET_ID): Portal {
+  const portal: Portal = { id: uid('p'), asset_id: assetId, local_position: localPosition, local_normal: localNormal, label: '', target: null };
+  if (!palace.portals) palace.portals = [];
+  palace.portals.push(portal);
+  return portal;
+}
+
+/**
+ * Migrate the old model (a locus.child_palace) to first-class portals: each locus
+ * that had a child becomes a portal at the same spot. Recurses into every target.
+ */
+export function migratePalace(palace: Palace): void {
+  if (!palace.portals) palace.portals = [];
+  for (const locus of palace.loci) {
+    if (locus.child_palace) {
+      palace.portals.push({
+        id: uid('p'),
+        asset_id: locus.asset_id,
+        local_position: locus.local_position,
+        local_normal: locus.local_normal,
+        label: locus.label || 'Portal',
+        target: locus.child_palace,
+      });
+      locus.child_palace = null;
+    }
+  }
+  for (const portal of palace.portals) {
+    if (portal.target) migratePalace(portal.target);
+  }
+}
+
 export interface Zone {
   id: string;
   name: string;
@@ -91,6 +137,8 @@ export interface Palace {
   assets: Asset[];
   loci: Locus[];
   zones: Zone[];
+  /** First-class portals to other worlds. */
+  portals?: Portal[];
   /** Optional so older palace files still load; defaults applied on read. */
   environment?: Environment;
   /** Which image pipeline this world uses (credentials are app-global). */

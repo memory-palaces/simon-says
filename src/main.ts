@@ -34,10 +34,12 @@ import {
 import {
   addAttachment,
   addLocus,
+  addPortal,
   createEmptyPalace,
   DEFAULT_ASSET_ID,
   DEFAULT_BACKGROUND,
   lociInOrder,
+  migratePalace,
   removeLocus,
   reorderLocus,
   setAsset,
@@ -76,8 +78,9 @@ class App {
   private palace: Palace = createEmptyPalace('My palace');
   /** The top-level palace. Save, autosave and undo history all operate on this. */
   private root: Palace = this.palace;
-  /** Descent path into nested child palaces, with the camera state to return to. */
-  private navStack: Array<{ locusId: string; camPos: THREE.Vector3; camQuat: THREE.Quaternion; flying: boolean }> = [];
+  /** Descent path through portals, with the camera state to return to each level. */
+  private navStack: Array<{ portalId: string; camPos: THREE.Vector3; camQuat: THREE.Quaternion; flying: boolean }> = [];
+  private targetedPortalId: string | null = null;
   private mode: Mode = 'edit';
   private selectedId: string | null = null;
   private targetedId: string | null = null;
@@ -159,9 +162,10 @@ class App {
       setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
       setStyle: (id) => this.setStyle(id),
       setFalModel: (model) => this.setFalModel(model),
-      enterChild: (id) => this.enterChild(id),
-      removeChild: (id) => this.removeChild(id),
-      renameChild: (id, name) => this.renameChild(id, name),
+      enterPortal: (id) => void this.enterPortal(id),
+      removePortal: (id) => this.removePortal(id),
+      renamePortal: (id, name) => this.renamePortal(id, name),
+      gotoPortal: (id) => this.gotoPortal(id),
       returnToParent: () => this.returnToParent(),
     });
     this.syncGeneration();
@@ -380,12 +384,13 @@ class App {
     this.toasts.info(on ? 'X-ray on — all pins show through walls' : 'X-ray off — pins hidden behind walls');
   }
 
-  /** Walk-mode click on the targeted marker: enter its inner palace, or edit it. */
+  /** Walk-mode click: enter a targeted portal, else open the targeted locus editor. */
   private clickTargeted(): void {
-    if (!this.targetedId) return;
-    const locus = this.palace.loci.find((l) => l.id === this.targetedId);
-    if (locus?.child_palace) void this.enterChild(this.targetedId);
-    else this.openTargetedInEditor();
+    if (this.targetedPortalId) {
+      void this.enterPortal(this.targetedPortalId);
+    } else if (this.targetedId) {
+      this.openTargetedInEditor();
+    }
   }
 
   /** Mouse-wheel dolly along the view direction (quick zoom), scaled to the player. */
@@ -419,7 +424,7 @@ class App {
     // looking at — a doorway pin enters its inner palace, otherwise open its editor.
     canvas.addEventListener('click', () => {
       if (this.mode === 'edit') this.enterWalk();
-      else if (this.mode === 'walk' && this.targetedId && !this.movingId) this.clickTargeted();
+      else if (this.mode === 'walk' && !this.movingId && (this.targetedId || this.targetedPortalId)) this.clickTargeted();
     });
     // Right-click releases the mouse (like Esc), so you don't have to reach for it.
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -459,11 +464,14 @@ class App {
         }, false);
         this.loci.sync(this.palace);
       } else {
-        // Highlight whatever marker the crosshair is over.
-        const id = this.loci.pick(this.crosshairRay());
-        if (id !== this.targetedId) {
-          this.targetedId = id;
-          this.loci.setTargeted(id);
+        // Highlight whatever the crosshair is over — a portal takes priority.
+        const ray = this.crosshairRay();
+        const portalId = this.loci.pickPortal(ray);
+        const locusId = portalId ? null : this.loci.pick(ray);
+        if (portalId !== this.targetedPortalId || locusId !== this.targetedId) {
+          this.targetedPortalId = portalId;
+          this.targetedId = locusId;
+          this.loci.setTargeted(locusId);
           this.updateTooltip();
         }
       }
@@ -473,6 +481,12 @@ class App {
 
   /** Floating title (+ notes preview) near the crosshair for the aimed-at orb. */
   private updateTooltip(): void {
+    if (this.targetedPortalId) {
+      const p = this.palace.portals?.find((x) => x.id === this.targetedPortalId);
+      const name = escapeHtml(p?.label || (p?.target ? p.target.name : 'New world'));
+      this.overlay.setTooltip(`<div class="tt-title">Portal</div><div class="tt-door">↳ ${name} — Enter</div>`);
+      return;
+    }
     const t = this.targetedId ? this.palace.loci.find((l) => l.id === this.targetedId) : null;
     if (!t) {
       this.overlay.setTooltip(null);
@@ -481,8 +495,7 @@ class App {
     const title = escapeHtml(t.label || `Locus ${t.order}`);
     const notes = t.notes?.trim();
     const notesHtml = notes ? `<div class="tt-notes">${escapeHtml(notes.slice(0, 140))}${notes.length > 140 ? '…' : ''}</div>` : '';
-    const door = t.child_palace ? '<div class="tt-door">↳ inner world — Enter</div>' : '';
-    this.overlay.setTooltip(`<div class="tt-title">${title}</div>${notesHtml}${door}`);
+    this.overlay.setTooltip(`<div class="tt-title">${title}</div>${notesHtml}`);
   }
 
   private readonly _ray = new THREE.Raycaster();
@@ -497,11 +510,12 @@ class App {
     const n = this.palace.loci.length;
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
     if (this.movingId) parts.push('moving — [T] drop');
+    else if (this.targetedPortalId) parts.push('portal — [Enter] go through');
     else if (this.targetedId) {
       const t = this.palace.loci.find((l) => l.id === this.targetedId);
       const name = t?.label ? `“${t.label}”` : 'marker';
-      parts.push(`${name} — [B] delete  [G] move${t?.child_palace ? '  [Enter] enter' : ''}`);
-    } else parts.push('[T] drop a locus · [?] help');
+      parts.push(`${name} — [B] delete  [G] move`);
+    } else parts.push('[T] locus · [P] portal · [?] help');
     if (this.navStack.length > 0) parts.push('[Backspace] return');
     parts.push(this.viewer.fp.mode === 'fly' ? 'fly' : 'walk');
     this.overlay.setHud(parts.join('   ·   '));
@@ -556,11 +570,9 @@ class App {
       else if (e.code === 'KeyG') this.toggleMove();
       else if (e.code === 'KeyR') this.viewer.recenter();
       else if (e.code === 'KeyX') this.toggleXray();
-      else if (e.code === 'Enter' && this.targetedId) {
-        // Only descend into an EXISTING child; creating one stays explicit (panel).
-        const l = this.palace.loci.find((x) => x.id === this.targetedId);
-        if (l?.child_palace) void this.enterChild(this.targetedId);
-      } else if (e.code === 'Backspace') {
+      else if (e.code === 'KeyP') this.placePortal();
+      else if (e.code === 'Enter' && this.targetedPortalId) void this.enterPortal(this.targetedPortalId);
+      else if (e.code === 'Backspace') {
         e.preventDefault(); // stop Firefox from navigating back
         void this.returnToParent();
       }
@@ -996,15 +1008,15 @@ class App {
     this.viewer.teleportTo(viewPos, pos);
   }
 
-  // --- Nested child palaces --------------------------------------------------
+  // --- Portals (nested worlds) -----------------------------------------------
 
-  /** Resolve the palace at the current descent path (root -> child -> …). */
+  /** Resolve the world at the current descent path (root -> portal target -> …). */
   private resolveCurrent(): Palace {
     let p = this.root;
     for (const frame of this.navStack) {
-      const locus = p.loci.find((l) => l.id === frame.locusId);
-      if (!locus?.child_palace) break;
-      p = locus.child_palace;
+      const portal = p.portals?.find((pr) => pr.id === frame.portalId);
+      if (!portal?.target) break;
+      p = portal.target;
     }
     return p;
   }
@@ -1041,27 +1053,36 @@ class App {
     this.fadeEl.classList.remove('on');
   }
 
-  /** Descend into a locus's child palace (creating an empty one if needed). */
-  private async enterChild(locusId: string): Promise<void> {
-    const locus = this.palace.loci.find((l) => l.id === locusId);
-    if (!locus) return;
-    if (!locus.child_palace) {
-      const child = createEmptyPalace(locus.label || 'Inner world');
-      // Inherit the parent world's image pipeline + style so it isn't reset to None.
-      if (this.palace.generation) child.generation = { ...this.palace.generation };
-      locus.child_palace = child;
+  /** Drop a portal at the crosshair (its target world is created on first entry). */
+  private placePortal(): void {
+    const hit = this.viewer.raycastSurface();
+    if (!hit) return;
+    const local = this.loci.worldToLocal(DEFAULT_ASSET_ID, hit.point, hit.normal);
+    addPortal(this.palace, local.position, local.normal);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.toasts.info('Portal placed — aim at it and press Enter to go through');
+  }
+
+  /** Step through a portal into its target world (creating an empty one if needed). */
+  private async enterPortal(portalId: string): Promise<void> {
+    const portal = this.palace.portals?.find((p) => p.id === portalId);
+    if (!portal) return;
+    if (!portal.target) {
+      const target = createEmptyPalace(portal.label || 'New world');
+      if (this.palace.generation) target.generation = { ...this.palace.generation };
+      portal.target = target;
       this.checkpoint();
     }
-    const child = locus.child_palace!; // guaranteed non-null after the block above
-    // Remember the camera so Return drops us back exactly where we were.
+    const target = portal.target!;
     this.navStack.push({
-      locusId,
+      portalId,
       camPos: this.viewer.camera.position.clone(),
       camQuat: this.viewer.camera.quaternion.clone(),
       flying: this.viewer.fp.mode === 'fly',
     });
     await this.transition(async () => {
-      this.palace = child;
+      this.palace = target;
       this.selectedId = null;
       await this.enterPalaceGeometry();
     });
@@ -1070,7 +1091,7 @@ class App {
     this.toasts.info(`Entered “${this.palace.name}” — Backspace to return`);
   }
 
-  /** Pop back up to the parent palace, restoring its geometry and camera. */
+  /** Pop back up to the parent world, restoring its geometry and camera. */
   private async returnToParent(): Promise<void> {
     const frame = this.navStack.pop();
     if (!frame) return;
@@ -1086,34 +1107,48 @@ class App {
     if (this.mode === 'edit') this.renderEditor();
   }
 
-  private removeChild(locusId: string): void {
-    const locus = this.palace.loci.find((l) => l.id === locusId);
-    if (!locus) return;
-    locus.child_palace = null;
+  private removePortal(portalId: string): void {
+    if (!this.palace.portals) return;
+    this.palace.portals = this.palace.portals.filter((p) => p.id !== portalId);
+    this.loci.sync(this.palace);
     this.checkpoint();
     this.renderEditor();
   }
 
-  private renameChild(locusId: string, name: string): void {
-    const locus = this.palace.loci.find((l) => l.id === locusId);
-    if (!locus?.child_palace) return;
-    locus.child_palace.name = name;
+  private renamePortal(portalId: string, name: string): void {
+    const portal = this.palace.portals?.find((p) => p.id === portalId);
+    if (!portal) return;
+    portal.label = name;
     this.checkpointSoon(); // no re-render: keep focus in the field
+  }
+
+  private gotoPortal(portalId: string): void {
+    const portal = this.palace.portals?.find((p) => p.id === portalId);
+    if (!portal) return;
+    const pos = this.loci.worldPositionOfPortal(portal, this.scratchA);
+    const normal = this.loci.worldNormal({ local_normal: portal.local_normal, asset_id: portal.asset_id } as Locus, this.scratchB);
+    const horiz = new THREE.Vector3(normal.x, 0, normal.z);
+    if (horiz.lengthSq() < 0.02) horiz.set(0, 0, 1);
+    horiz.normalize();
+    const viewPos = pos.clone().addScaledVector(horiz, 2.2);
+    viewPos.y = pos.y + 0.8;
+    this.viewer.fp.setFlying(true);
+    this.viewer.teleportTo(viewPos, pos);
   }
 
   /** Tell the panel how deep we are so it can show a Return / breadcrumb bar. */
   private updateReturnUi(): void {
-    const trail = [this.root.name, ...this.navStack.map((_, i) => this.paletteNameAt(i + 1))];
+    const trail = [this.root.name, ...this.navStack.map((_, i) => this.worldNameAt(i + 1))];
     this.editor.setNesting(this.navStack.length, trail);
   }
 
-  /** Name of the palace at descent depth `depth` (0 = root). */
-  private paletteNameAt(depth: number): string {
+  /** Name of the world at descent depth `depth` (0 = root). */
+  private worldNameAt(depth: number): string {
     let p = this.root;
     for (let i = 0; i < depth && i < this.navStack.length; i++) {
-      const locus = p.loci.find((l) => l.id === this.navStack[i].locusId);
-      if (!locus?.child_palace) break;
-      p = locus.child_palace;
+      const portal = p.portals?.find((pr) => pr.id === this.navStack[i].portalId);
+      if (!portal?.target) break;
+      p = portal.target;
     }
     return p.name;
   }
@@ -1239,6 +1274,7 @@ class App {
 
   /** Load a palace, then try to bring in its geometry (or ask the user to drop it). */
   private async adoptPalace(palace: Palace): Promise<void> {
+    migratePalace(palace); // convert any old locus.child_palace to first-class portals
     this.palace = palace;
     this.root = palace;
     this.navStack = [];

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { Locus, Palace, Vec3 } from '../model/palace';
+import type { Locus, Palace, Portal, Vec3 } from '../model/palace';
 
 const meshLoader = new GLTFLoader();
 const PORTAL_AXIS = new THREE.Vector3(0, 0, 1); // torus's local axis, aligned to the surface normal
@@ -52,6 +52,7 @@ interface Marker {
 export class LociLayer {
   private readonly group = new THREE.Group();
   private readonly markers = new Map<string, Marker>();
+  private readonly portalMarkers = new Map<string, { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh }>();
   private readonly resolve: ResolveAsset;
   private readonly labelTextures = new Map<number, THREE.Texture>();
 
@@ -111,6 +112,60 @@ export class LociLayer {
       }
     }
     this.refreshStates();
+    this.syncPortals(palace);
+  }
+
+  /** Render a pulsing ring for each first-class portal (position/orient like loci). */
+  private syncPortals(palace: Palace): void {
+    const live = new Set<string>();
+    for (const portal of palace.portals ?? []) {
+      live.add(portal.id);
+      const root = this.resolve(portal.asset_id);
+      if (!root) continue;
+      root.updateWorldMatrix(true, false);
+      const pm = this.portalMarkers.get(portal.id) ?? this.createPortal(portal.id);
+      this.v.set(portal.local_position[0], portal.local_position[1], portal.local_position[2]).applyMatrix4(root.matrixWorld);
+      this.n.set(portal.local_normal[0], portal.local_normal[1], portal.local_normal[2]).transformDirection(root.matrixWorld).normalize();
+      pm.group.position.copy(this.v).addScaledVector(this.n, 0.06);
+      pm.ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.n);
+    }
+    for (const [id, pm] of this.portalMarkers) {
+      if (!live.has(id)) {
+        this.group.remove(pm.group);
+        this.portalMarkers.delete(id);
+      }
+    }
+  }
+
+  private createPortal(id: string): { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh } {
+    const group = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.34, 0.05, 16, 48),
+      new THREE.MeshBasicMaterial({ color: 0xb98cff, toneMapped: false, transparent: true, opacity: 0.92 }),
+    );
+    // Invisible sphere for reliable crosshair picking through the ring's hole.
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.userData.portalId = id;
+    group.add(ring, hit);
+    this.group.add(group);
+    const pm = { group, ring, hit };
+    this.portalMarkers.set(id, pm);
+    return pm;
+  }
+
+  /** The portal id under a ray (crosshair), or null. */
+  pickPortal(raycaster: THREE.Raycaster): string | null {
+    const hits: THREE.Object3D[] = [];
+    for (const pm of this.portalMarkers.values()) hits.push(pm.hit);
+    const found = raycaster.intersectObjects(hits, false);
+    return found.length > 0 ? (found[0].object.userData.portalId as string) : null;
+  }
+
+  worldPositionOfPortal(portal: Portal, out: THREE.Vector3): THREE.Vector3 {
+    const root = this.resolve(portal.asset_id);
+    if (!root) return out.set(0, 0, 0);
+    root.updateWorldMatrix(true, false);
+    return out.set(portal.local_position[0], portal.local_position[1], portal.local_position[2]).applyMatrix4(root.matrixWorld);
   }
 
   private placeMarker(marker: Marker, locus: Locus, root: THREE.Object3D): void {
@@ -241,6 +296,7 @@ export class LociLayer {
     for (const marker of this.markers.values()) {
       if (marker.portal) marker.portal.scale.setScalar(s);
     }
+    for (const pm of this.portalMarkers.values()) pm.ring.scale.setScalar(s);
   }
 
   private updatePortal(marker: Marker): void {

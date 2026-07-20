@@ -46,9 +46,10 @@ export interface EditorHandlers {
   removeAttachment(id: string, index: number): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
-  enterChild(id: string): void;
-  removeChild(id: string): void;
-  renameChild(id: string, name: string): void;
+  enterPortal(id: string): void;
+  removePortal(id: string): void;
+  renamePortal(id: string, name: string): void;
+  gotoPortal(id: string): void;
   returnToParent(): void;
 }
 
@@ -244,6 +245,9 @@ export class EditorPanel {
     }
     this.root.appendChild(list);
 
+    // --- Portals to other worlds -----------------------------------------------
+    this.root.appendChild(this.portalsSection(palace));
+
     // --- This world: image pipeline + background -------------------------------
     this.root.appendChild(this.generationSection());
     this.root.appendChild(this.worldSection(palace));
@@ -437,24 +441,6 @@ export class EditorPanel {
       });
     }
 
-    // Nested child palace: a whole space you can step into at this locus.
-    if (locus.child_palace) {
-      const nameField = field('Inner world', 'name this inner space');
-      const nm = nameField.input as HTMLInputElement;
-      nm.value = locus.child_palace.name;
-      nm.oninput = () => this.handlers.renameChild(locus.id, nm.value);
-      wrap.appendChild(nameField.el);
-
-      const row = div('locus-gen-row');
-      row.appendChild(button('↳ Enter', '', () => this.handlers.enterChild(locus.id)));
-      row.appendChild(iconButton('🗑', 'remove inner world', () => this.handlers.removeChild(locus.id)));
-      wrap.appendChild(row);
-    } else {
-      const row = div('locus-gen-row');
-      row.appendChild(button('➕ Add inner world', '', () => this.handlers.enterChild(locus.id)));
-      wrap.appendChild(row);
-    }
-
     return wrap;
   }
 
@@ -544,6 +530,45 @@ export class EditorPanel {
     });
     strip.appendChild(grid);
     return strip;
+  }
+
+  /** Portals in this world — name, fly-to, enter, remove. Drop with P in walk. */
+  private portalsSection(palace: Palace): HTMLElement {
+    const wrap = div('editor-gen');
+    const title = div('ctrl-title');
+    title.textContent = 'Portals';
+    wrap.appendChild(title);
+
+    const portals = palace.portals ?? [];
+    if (portals.length === 0) {
+      const hint = div('locus-gen-hint');
+      hint.innerHTML = 'None yet. In walk mode press <kbd>P</kbd> to drop a portal, then aim at it and press <kbd>Enter</kbd> to go through.';
+      wrap.appendChild(hint);
+      return wrap;
+    }
+
+    for (const portal of portals) {
+      const row = div('locus-row');
+      const num = div('locus-num clickable');
+      num.textContent = '◎';
+      num.title = 'fly to portal';
+      num.onclick = () => this.handlers.gotoPortal(portal.id);
+      row.appendChild(num);
+
+      const input = document.createElement('input');
+      input.className = 'portal-name';
+      input.value = portal.label;
+      input.placeholder = portal.target ? portal.target.name : 'unnamed portal';
+      input.oninput = () => this.handlers.renamePortal(portal.id, input.value);
+      row.appendChild(input);
+
+      const ctrls = div('locus-ctrls');
+      ctrls.appendChild(iconButton('↳', 'enter', () => this.handlers.enterPortal(portal.id)));
+      ctrls.appendChild(iconButton('🗑', 'remove portal', () => this.handlers.removePortal(portal.id)));
+      row.appendChild(ctrls);
+      wrap.appendChild(row);
+    }
+    return wrap;
   }
 
   private generationSection(): HTMLElement {

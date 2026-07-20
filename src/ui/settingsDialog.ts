@@ -134,7 +134,8 @@ export class SettingsDialog {
       <span>Recenter on floor</span><span>R</span>
       <span>X-ray (all pins through walls)</span><span>X</span>
       <span>Show controls help</span><span>?</span>
-      <span>Enter inner world (aim at doorway pin)</span><span>Enter</span>
+      <span>Drop a portal</span><span>P</span>
+      <span>Go through a portal (aim at it)</span><span>Enter</span>
       <span>Return to parent world</span><span>Backspace</span>
       <span>Open locus editor</span><span>click a marker</span>
       <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
