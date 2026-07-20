@@ -12,7 +12,7 @@ import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
 import { SettingsDialog } from './ui/settingsDialog';
 import { Toasts } from './ui/toasts';
-import { openGoToDialog } from './ui/goToDialog';
+import { openGoToDialog, type GoToItem } from './ui/goToDialog';
 import { MeshPreview } from './ui/meshPreview';
 import { HelpOverlay } from './ui/help';
 import { MapOverlay } from './ui/mapOverlay';
@@ -365,18 +365,33 @@ class App {
 
   /** Ctrl/Cmd+G: jump to a locus by number or name. */
   private openGoTo(): void {
-    if (this.palace.loci.length === 0) {
-      this.toasts.info('No loci to go to yet.');
+    const portals = this.palace.portals ?? [];
+    if (this.palace.loci.length === 0 && portals.length === 0) {
+      this.toasts.info('No loci or portals to go to yet.');
       return;
     }
     // Release the pointer so the user can type into the palette.
     if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
-    const items = lociInOrder(this.palace).map((l) => ({ id: l.id, order: l.order, label: l.label }));
+    const items: GoToItem[] = [
+      ...lociInOrder(this.palace).map((l) => ({ id: l.id, order: l.order, label: l.label, kind: 'locus' as const })),
+      ...portals.map((p) => ({
+        id: p.id,
+        order: -1,
+        label: `${p.label || '(unnamed portal)'} ↗ ${p.target?.name ?? 'empty'}`,
+        kind: 'portal' as const,
+      })),
+    ];
     openGoToDialog(this.mount, items, (id) => {
-      this.gotoLocus(id);
-      // Fly in at the pin so you don't immediately drop off an upper floor.
+      // Fly in so you don't immediately drop off an upper floor.
       this.viewer.fp.setFlying(true);
       this.enterWalk();
+      if (portals.some((p) => p.id === id)) {
+        this.gotoPortal(id);
+        const p = portals.find((x) => x.id === id);
+        this.toasts.info(`Jumped to portal${p?.label ? ` — ${p.label}` : ''}`);
+        return;
+      }
+      this.gotoLocus(id);
       const l = this.palace.loci.find((x) => x.id === id);
       if (l) this.toasts.info(`Jumped to #${l.order}${l.label ? ` — ${l.label}` : ''}`);
     });

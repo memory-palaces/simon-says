@@ -305,49 +305,33 @@ export class EditorPanel {
     wrap.appendChild(patternRow);
 
     // Brightness — lifts dark interiors (scales all lights + the headlamp).
-    const brightRow = div('bright-row');
-    const brightLabel = document.createElement('span');
-    brightLabel.className = 'bright-label';
-    brightLabel.textContent = 'Brightness';
-    const bright = document.createElement('input');
-    bright.type = 'range';
-    bright.min = '0.3';
-    bright.max = '3';
-    bright.step = '0.1';
-    bright.value = String(palace.environment?.brightness ?? 1);
-    bright.oninput = () => this.handlers.setBrightness(parseFloat(bright.value));
-    bright.ondblclick = () => {
-      bright.value = '1';
-      this.handlers.setBrightness(1);
-    };
-    bright.title = 'double-click to reset';
-    brightRow.append(brightLabel, bright);
-    wrap.appendChild(brightRow);
+    wrap.appendChild(
+      sliderRow({
+        label: 'Brightness',
+        min: 0.3,
+        max: 3,
+        step: 0.1,
+        value: palace.environment?.brightness ?? 1,
+        def: 1,
+        onChange: (v) => this.handlers.setBrightness(v),
+      }),
+    );
 
-    // Player scale — be tiny (space feels huge) or a giant. Logarithmic-ish range.
-    const scaleRow = div('bright-row');
-    const scaleLabel = document.createElement('span');
-    scaleLabel.className = 'bright-label';
-    scaleLabel.textContent = 'Player scale';
-    const scale = document.createElement('input');
-    scale.type = 'range';
-    scale.min = '0.1';
-    scale.max = '5';
-    scale.step = '0.1';
-    scale.value = String(palace.environment?.playerScale ?? 1);
-    scale.oninput = () => this.handlers.setPlayerScale(parseFloat(scale.value));
-    scale.ondblclick = () => {
-      scale.value = '1';
-      this.handlers.setPlayerScale(1);
-    };
-    scale.title = 'double-click to reset';
-    const figBtn = document.createElement('button');
-    figBtn.className = 'icon-btn';
-    figBtn.textContent = '🚶';
-    figBtn.title = 'Toggle a person-sized scale reference';
-    figBtn.onclick = () => this.handlers.toggleScaleFigure();
-    scaleRow.append(scaleLabel, scale, figBtn);
-    wrap.appendChild(scaleRow);
+    // Player scale — be tiny (space feels huge) or a giant. The 🚶 button drops a
+    // person-sized reference so you can eyeball the scale.
+    const figBtn = iconButton('🚶', 'Toggle a person-sized scale reference', () => this.handlers.toggleScaleFigure());
+    wrap.appendChild(
+      sliderRow({
+        label: 'Player scale',
+        min: 0.1,
+        max: 5,
+        step: 0.1,
+        value: palace.environment?.playerScale ?? 1,
+        def: 1,
+        onChange: (v) => this.handlers.setPlayerScale(v),
+        trailing: figBtn,
+      }),
+    );
     return wrap;
   }
 
@@ -405,58 +389,34 @@ export class EditorPanel {
 
     // Per-locus object scale (only meaningful once something is attached).
     if (locus.image_2d || locus.mesh_3d) {
-      const scaleRow = div('bright-row');
-      const lab = document.createElement('span');
-      lab.className = 'bright-label';
-      lab.textContent = 'Object scale';
-      const rng = document.createElement('input');
-      rng.type = 'range';
-      rng.min = '0.2';
-      rng.max = '5';
-      rng.step = '0.1';
-      rng.value = String(locus.object_scale ?? 1);
-      rng.oninput = () => this.handlers.setObjectScale(locus.id, parseFloat(rng.value));
-      rng.ondblclick = () => {
-        rng.value = '1';
-        this.handlers.setObjectScale(locus.id, 1);
-      };
-      rng.title = 'double-click to reset';
-      scaleRow.append(lab, rng);
-      wrap.appendChild(scaleRow);
+      wrap.appendChild(
+        sliderRow({
+          label: 'Object scale',
+          min: 0.2,
+          max: 5,
+          step: 0.1,
+          value: locus.object_scale ?? 1,
+          def: 1,
+          onChange: (v) => this.handlers.setObjectScale(locus.id, v),
+        }),
+      );
     }
 
     // Rotation for a 3D mesh (images are camera-facing billboards, no rotation).
-    // Slider + exact number box; double-click the slider to reset to 0.
     if (locus.mesh_3d) {
       const rot = locus.object_rotation ?? [0, 0, 0];
       ['Rotate X', 'Rotate Y', 'Rotate Z'].forEach((label, axis) => {
-        const row = div('bright-row');
-        const lab = document.createElement('span');
-        lab.className = 'bright-label';
-        lab.textContent = label;
-        const num = document.createElement('input');
-        num.type = 'number';
-        num.className = 'rot-num';
-        num.min = '-180';
-        num.max = '180';
-        num.step = '5';
-        num.value = String(rot[axis]);
-        const rng = document.createElement('input');
-        rng.type = 'range';
-        rng.min = '-180';
-        rng.max = '180';
-        rng.step = '5';
-        rng.value = String(rot[axis]);
-        const apply = (v: number) => {
-          rng.value = String(v);
-          num.value = String(v);
-          this.handlers.setObjectRotation(locus.id, axis, v);
-        };
-        rng.oninput = () => apply(parseFloat(rng.value));
-        num.oninput = () => apply(parseFloat(num.value) || 0);
-        rng.ondblclick = () => apply(0);
-        row.append(lab, rng, num);
-        wrap.appendChild(row);
+        wrap.appendChild(
+          sliderRow({
+            label,
+            min: -180,
+            max: 180,
+            step: 5,
+            value: rot[axis],
+            def: 0,
+            onChange: (v) => this.handlers.setObjectRotation(locus.id, axis, v),
+          }),
+        );
       });
     }
 
@@ -639,6 +599,65 @@ function div(className: string): HTMLElement {
   const el = document.createElement('div');
   el.className = className;
   return el;
+}
+
+/**
+ * A labelled slider with an exact number box beside it, a notch marking the
+ * default value, and double-click (on either control) to snap back to default.
+ */
+function sliderRow(opts: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  def: number;
+  onChange: (v: number) => void;
+  trailing?: HTMLElement;
+}): HTMLElement {
+  const row = div('slider-row');
+  const lab = document.createElement('span');
+  lab.className = 'slider-label';
+  lab.textContent = opts.label;
+
+  const wrap = div('slider-wrap');
+  const rng = document.createElement('input');
+  rng.type = 'range';
+  rng.min = String(opts.min);
+  rng.max = String(opts.max);
+  rng.step = String(opts.step);
+  rng.value = String(opts.value);
+  rng.title = 'double-click to reset to default';
+
+  // Notch at the default position (percentage along the track).
+  const notch = div('slider-notch');
+  const pct = ((opts.def - opts.min) / (opts.max - opts.min)) * 100;
+  notch.style.left = `${Math.max(0, Math.min(100, pct))}%`;
+  notch.title = `default ${opts.def}`;
+  wrap.append(rng, notch);
+
+  const num = document.createElement('input');
+  num.type = 'number';
+  num.className = 'slider-num';
+  num.min = String(opts.min);
+  num.max = String(opts.max);
+  num.step = String(opts.step);
+  num.value = String(opts.value);
+
+  const apply = (v: number, echoNum = true): void => {
+    if (Number.isNaN(v)) v = opts.def;
+    rng.value = String(v);
+    if (echoNum) num.value = String(v);
+    opts.onChange(v);
+  };
+  rng.oninput = () => apply(parseFloat(rng.value));
+  num.oninput = () => apply(parseFloat(num.value), false);
+  rng.ondblclick = () => apply(opts.def);
+  num.ondblclick = () => apply(opts.def);
+
+  row.append(lab, wrap, num);
+  if (opts.trailing) row.append(opts.trailing);
+  return row;
 }
 
 function labeledSelect(

@@ -236,14 +236,28 @@ export class Viewer {
   }
 
   private scaleFigure: THREE.Sprite | null = null;
+  private scaleShadow: THREE.Mesh | null = null;
 
-  /** Toggle a person-shaped scale reference standing in front of you. Returns visible. */
+  /**
+   * Toggle a person-shaped scale reference. It stands squared-up beside the
+   * current model — on the model's ground plane, at the face turned toward you —
+   * so you can eyeball a 1.8 m person against the building as you slide the
+   * player scale. A soft contact shadow keeps it planted on the floor. Returns
+   * whether it is now visible.
+   */
   toggleScaleFigure(playerScale: number): boolean {
     if (this.scaleFigure) {
       this.scene.remove(this.scaleFigure);
       (this.scaleFigure.material as THREE.SpriteMaterial).map?.dispose();
       this.scaleFigure.material.dispose();
       this.scaleFigure = null;
+      if (this.scaleShadow) {
+        this.scene.remove(this.scaleShadow);
+        (this.scaleShadow.material as THREE.MeshBasicMaterial).map?.dispose();
+        (this.scaleShadow.material as THREE.Material).dispose();
+        this.scaleShadow.geometry.dispose();
+        this.scaleShadow = null;
+      }
       return false;
     }
     const fig = new THREE.Sprite(
@@ -253,25 +267,54 @@ export class Viewer {
     this.scene.add(fig);
     this.scaleFigure = fig;
 
-    // Place it a few metres in front of you, dropped to the floor.
-    this.camera.getWorldDirection(this.camDir);
-    const spot = this.camera.position.clone().addScaledVector(new THREE.Vector3(this.camDir.x, 0, this.camDir.z).normalize(), 3);
-    let floorY = this.camera.position.y - this.fp.eyeOffset;
-    if (this.currentModel) {
-      this.pickRay.set(new THREE.Vector3(spot.x, this.camera.position.y + 2, spot.z), new THREE.Vector3(0, -1, 0));
-      this.pickRay.far = Infinity;
-      const hits = this.pickRay.intersectObject(this.currentModel, true);
-      if (hits.length > 0) floorY = hits[0].point.y;
-    }
-    fig.position.set(spot.x, floorY, spot.z);
+    // A soft blob shadow so the figure reads as planted (sprites can't cast a
+    // real shadow, so we fake the ground contact).
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.5, 32),
+      new THREE.MeshBasicMaterial({ map: blobShadowTexture(), transparent: true, depthWrite: false, opacity: 0.55 }),
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    this.scene.add(shadow);
+    this.scaleShadow = shadow;
+
+    this.placeScaleFigure();
     this.setScaleFigureScale(playerScale);
     return true;
+  }
+
+  /** Position the figure on the model's ground, at the side facing the camera. */
+  private placeScaleFigure(): void {
+    if (!this.scaleFigure) return;
+    let spot: THREE.Vector3;
+    let floorY: number;
+    if (this.currentModel) {
+      const box = new THREE.Box3().setFromObject(this.currentModel);
+      const center = box.getCenter(new THREE.Vector3());
+      const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+      const dir = new THREE.Vector3().subVectors(this.camera.position, center);
+      dir.y = 0;
+      if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
+      dir.normalize();
+      // March from the centre out to whichever bounding face `dir` hits first.
+      const tX = Math.abs(dir.x) > 1e-4 ? half.x / Math.abs(dir.x) : Infinity;
+      const tZ = Math.abs(dir.z) > 1e-4 ? half.z / Math.abs(dir.z) : Infinity;
+      const t = Math.min(tX, tZ);
+      spot = center.addScaledVector(dir, t + 0.6); // stand just outside the wall
+      floorY = box.min.y;
+    } else {
+      this.camera.getWorldDirection(this.camDir);
+      spot = this.camera.position.clone().addScaledVector(new THREE.Vector3(this.camDir.x, 0, this.camDir.z).normalize(), 3);
+      floorY = this.camera.position.y - this.fp.eyeOffset;
+    }
+    this.scaleFigure.position.set(spot.x, floorY, spot.z);
+    if (this.scaleShadow) this.scaleShadow.position.set(spot.x, floorY + 0.02, spot.z);
   }
 
   setScaleFigureScale(playerScale: number): void {
     if (!this.scaleFigure) return;
     const h = 1.8 * playerScale; // an average person, scaled with the player
     this.scaleFigure.scale.set(0.42 * h, h, 1);
+    if (this.scaleShadow) this.scaleShadow.scale.setScalar(Math.max(0.35, 0.42 * h));
   }
 
   /** Apply a palace's environment (background + fog colour), or the default. */
@@ -367,6 +410,21 @@ function personTexture(): THREE.Texture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+/** A soft round blob for the scale figure's fake contact shadow. */
+function blobShadowTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, 'rgba(0,0,0,0.85)');
+  g.addColorStop(0.6, 'rgba(0,0,0,0.4)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(canvas);
 }
 
 /** A vertical top->bottom gradient as a background texture. */

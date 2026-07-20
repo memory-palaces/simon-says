@@ -7,6 +7,7 @@ export interface GoToItem {
   id: string;
   order: number;
   label: string;
+  kind?: 'locus' | 'portal';
 }
 
 export function openGoToDialog(mount: HTMLElement, items: GoToItem[], onGo: (id: string) => void): void {
@@ -39,8 +40,9 @@ export function openGoToDialog(mount: HTMLElement, items: GoToItem[], onGo: (id:
     list.replaceChildren(
       ...matches.map((it) => {
         const row = document.createElement('div');
-        row.className = 'goto-row';
-        row.innerHTML = `<span class="goto-num">${it.order}</span><span>${escapeHtml(it.label || '(unlabeled)')}</span>`;
+        row.className = 'goto-row' + (it.kind === 'portal' ? ' goto-portal' : '');
+        const badge = it.kind === 'portal' ? '◎' : String(it.order);
+        row.innerHTML = `<span class="goto-num">${badge}</span><span>${escapeHtml(it.label || '(unlabeled)')}</span>`;
         row.onclick = () => go(it.id);
         return row;
       }),
