@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FirstPersonControls } from './FirstPersonControls';
 import { loadGlbFromUrl, loadGlbFromFile, type LoadedModel } from './loadGlb';
-import { DEFAULT_ASSET_ID, DEFAULT_BACKGROUND, type Environment } from '../model/palace';
+import { BACKGROUND_PATTERNS, DEFAULT_ASSET_ID, DEFAULT_BACKGROUND, type Environment } from '../model/palace';
 
 /** A surface hit under the crosshair, in world space. */
 export interface SurfaceHit {
@@ -236,10 +236,23 @@ export class Viewer {
   }
 
   /** Apply a palace's environment (background + fog colour), or the default. */
+  private bgTexture: THREE.Texture | null = null;
+
   applyEnvironment(env?: Environment): void {
-    const color = new THREE.Color(env?.background || DEFAULT_BACKGROUND);
-    (this.scene.background as THREE.Color).copy(color);
-    (this.scene.fog as THREE.Fog).color.copy(color);
+    if (this.bgTexture) {
+      this.bgTexture.dispose();
+      this.bgTexture = null;
+    }
+    const pattern = env?.pattern ? BACKGROUND_PATTERNS.find((p) => p.id === env.pattern) : null;
+    if (pattern) {
+      this.bgTexture = gradientTexture(pattern.top, pattern.bottom);
+      this.scene.background = this.bgTexture;
+      (this.scene.fog as THREE.Fog).color.set(pattern.bottom);
+    } else {
+      const color = new THREE.Color(env?.background || DEFAULT_BACKGROUND);
+      this.scene.background = color;
+      (this.scene.fog as THREE.Fog).color.copy(color);
+    }
     this.setBrightness(env?.brightness ?? 1);
     this.fp.setScale(env?.playerScale ?? 1);
   }
@@ -281,6 +294,22 @@ export class Viewer {
     if (this.currentModel) disposeObject(this.currentModel);
     this.renderer.dispose();
   }
+}
+
+/** A vertical top->bottom gradient as a background texture. */
+function gradientTexture(top: string, bottom: string): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, top);
+  g.addColorStop(1, bottom);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 256);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 /** Free GPU memory for a subtree before we drop it. */

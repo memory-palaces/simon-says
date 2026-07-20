@@ -323,7 +323,8 @@ canvas {
   cursor: pointer;
   padding: 0;
 }
-.swatch:hover {
+.swatch:hover,
+.swatch.active {
   outline: 2px solid var(--ui-accent);
   outline-offset: 1px;
 }

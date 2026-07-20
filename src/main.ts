@@ -144,6 +144,7 @@ class App {
       undo: () => this.undo(),
       redo: () => this.redo(),
       setBackground: (hex) => this.setBackground(hex),
+      setPattern: (id) => this.setPattern(id),
       setBrightness: (v) => this.setBrightness(v),
       setPlayerScale: (v) => this.setPlayerScale(v),
       setBackendId: (id) => this.setBackendId(id),
@@ -694,10 +695,19 @@ class App {
   }
 
   private setBackground(hex: string): void {
-    this.palace.environment = { ...this.palace.environment, background: hex };
+    // A solid colour clears any gradient pattern.
+    this.palace.environment = { ...this.palace.environment, background: hex, pattern: undefined };
     this.viewer.applyEnvironment(this.palace.environment);
     this.markDirty();
     this.checkpointSoon(); // coalesce colour-picker dragging into one undo step
+  }
+
+  private setPattern(id: string): void {
+    this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), pattern: id };
+    this.viewer.applyEnvironment(this.palace.environment);
+    this.markDirty();
+    this.checkpoint();
+    this.renderEditor(); // reflect which swatch is active
   }
 
   private setBrightness(value: number): void {

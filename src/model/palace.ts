@@ -122,7 +122,18 @@ export interface Environment {
   brightness?: number;
   /** Player scale for this world (1 = human). <1 = tiny (space feels huge), >1 = giant. */
   playerScale?: number;
+  /** A gradient-sky pattern id (overrides the solid background when set). */
+  pattern?: string;
 }
+
+/** Cheerful vertical-gradient sky presets (top -> horizon). */
+export const BACKGROUND_PATTERNS: Array<{ id: string; label: string; top: string; bottom: string }> = [
+  { id: 'sky', label: 'Sky', top: '#7fb0e8', bottom: '#dfeaf5' },
+  { id: 'sunset', label: 'Sunset', top: '#f28d6b', bottom: '#f6dcc4' },
+  { id: 'dusk', label: 'Dusk', top: '#5b6bb0', bottom: '#d6c3ec' },
+  { id: 'meadow', label: 'Meadow', top: '#8fd0a0', bottom: '#eaf5da' },
+  { id: 'night', label: 'Night', top: '#0e1230', bottom: '#33406b' },
+];
 
 /** Which generation pipeline THIS world uses. Credentials live in app settings. */
 export interface WorldGeneration {

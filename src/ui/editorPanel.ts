@@ -1,4 +1,4 @@
-import { DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
+import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
 import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
 
 interface GenState {
@@ -29,6 +29,7 @@ export interface EditorHandlers {
   undo(): void;
   redo(): void;
   setBackground(hex: string): void;
+  setPattern(id: string): void;
   setBrightness(value: number): void;
   setPlayerScale(value: number): void;
   setBackendId(id: string): void;
@@ -289,6 +290,18 @@ export class EditorPanel {
       row.appendChild(sw);
     }
     wrap.appendChild(row);
+
+    // Gradient-sky patterns (cheerful).
+    const patternRow = div('world-row');
+    for (const pat of BACKGROUND_PATTERNS) {
+      const sw = document.createElement('button');
+      sw.className = 'swatch' + (palace.environment?.pattern === pat.id ? ' active' : '');
+      sw.title = pat.label;
+      sw.style.background = `linear-gradient(${pat.top}, ${pat.bottom})`;
+      sw.onclick = () => this.handlers.setPattern(pat.id);
+      patternRow.appendChild(sw);
+    }
+    wrap.appendChild(patternRow);
 
     // Brightness — lifts dark interiors (scales all lights + the headlamp).
     const brightRow = div('bright-row');
