@@ -235,6 +235,45 @@ export class Viewer {
     return { point: hit.point.clone(), normal };
   }
 
+  private scaleFigure: THREE.Sprite | null = null;
+
+  /** Toggle a person-shaped scale reference standing in front of you. Returns visible. */
+  toggleScaleFigure(playerScale: number): boolean {
+    if (this.scaleFigure) {
+      this.scene.remove(this.scaleFigure);
+      (this.scaleFigure.material as THREE.SpriteMaterial).map?.dispose();
+      this.scaleFigure.material.dispose();
+      this.scaleFigure = null;
+      return false;
+    }
+    const fig = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: personTexture(), transparent: true, depthWrite: false, toneMapped: false }),
+    );
+    fig.center.set(0.5, 0); // anchor at the feet so it stands on the floor
+    this.scene.add(fig);
+    this.scaleFigure = fig;
+
+    // Place it a few metres in front of you, dropped to the floor.
+    this.camera.getWorldDirection(this.camDir);
+    const spot = this.camera.position.clone().addScaledVector(new THREE.Vector3(this.camDir.x, 0, this.camDir.z).normalize(), 3);
+    let floorY = this.camera.position.y - this.fp.eyeOffset;
+    if (this.currentModel) {
+      this.pickRay.set(new THREE.Vector3(spot.x, this.camera.position.y + 2, spot.z), new THREE.Vector3(0, -1, 0));
+      this.pickRay.far = Infinity;
+      const hits = this.pickRay.intersectObject(this.currentModel, true);
+      if (hits.length > 0) floorY = hits[0].point.y;
+    }
+    fig.position.set(spot.x, floorY, spot.z);
+    this.setScaleFigureScale(playerScale);
+    return true;
+  }
+
+  setScaleFigureScale(playerScale: number): void {
+    if (!this.scaleFigure) return;
+    const h = 1.8 * playerScale; // an average person, scaled with the player
+    this.scaleFigure.scale.set(0.42 * h, h, 1);
+  }
+
   /** Apply a palace's environment (background + fog colour), or the default. */
   private bgTexture: THREE.Texture | null = null;
 
@@ -294,6 +333,40 @@ export class Viewer {
     if (this.currentModel) disposeObject(this.currentModel);
     this.renderer.dispose();
   }
+}
+
+/** A simple gender-neutral person silhouette for the scale reference. */
+function personTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = 'rgba(255, 207, 92, 0.92)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 4;
+  const cx = 64;
+  // head
+  ctx.beginPath();
+  ctx.arc(cx, 40, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // body (torso + tapered to legs) + arms as a simple silhouette
+  ctx.beginPath();
+  ctx.moveTo(cx - 26, 78);
+  ctx.lineTo(cx + 26, 78); // shoulders
+  ctx.lineTo(cx + 20, 150); // waist right
+  ctx.lineTo(cx + 22, 248); // leg right out
+  ctx.lineTo(cx + 6, 248);
+  ctx.lineTo(cx, 170); // crotch
+  ctx.lineTo(cx - 6, 248);
+  ctx.lineTo(cx - 22, 248); // leg left out
+  ctx.lineTo(cx - 20, 150);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 /** A vertical top->bottom gradient as a background texture. */

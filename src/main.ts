@@ -147,6 +147,7 @@ class App {
       setPattern: (id) => this.setPattern(id),
       setBrightness: (v) => this.setBrightness(v),
       setPlayerScale: (v) => this.setPlayerScale(v),
+      toggleScaleFigure: () => this.toggleScaleFigure(),
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
       clearImage: (id) => this.clearImage(id),
@@ -720,8 +721,14 @@ class App {
   private setPlayerScale(value: number): void {
     this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), playerScale: value };
     this.viewer.fp.setScale(value);
+    this.viewer.setScaleFigureScale(value);
     this.markDirty();
     this.checkpointSoon();
+  }
+
+  private toggleScaleFigure(): void {
+    const on = this.viewer.toggleScaleFigure(this.palace.environment?.playerScale ?? 1);
+    this.toasts.info(on ? 'Scale figure placed — a 1.8 m person at your player scale' : 'Scale figure hidden');
   }
 
   // --- Generation ------------------------------------------------------------

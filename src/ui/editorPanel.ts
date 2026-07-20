@@ -32,6 +32,7 @@ export interface EditorHandlers {
   setPattern(id: string): void;
   setBrightness(value: number): void;
   setPlayerScale(value: number): void;
+  toggleScaleFigure(): void;
   setBackendId(id: string): void;
   generate(id: string): void;
   clearImage(id: string): void;
@@ -340,7 +341,12 @@ export class EditorPanel {
       this.handlers.setPlayerScale(1);
     };
     scale.title = 'double-click to reset';
-    scaleRow.append(scaleLabel, scale);
+    const figBtn = document.createElement('button');
+    figBtn.className = 'icon-btn';
+    figBtn.textContent = '🚶';
+    figBtn.title = 'Toggle a person-sized scale reference';
+    figBtn.onclick = () => this.handlers.toggleScaleFigure();
+    scaleRow.append(scaleLabel, scale, figBtn);
     wrap.appendChild(scaleRow);
     return wrap;
   }
