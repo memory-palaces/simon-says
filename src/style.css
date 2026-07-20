@@ -823,6 +823,52 @@ canvas {
   font-size: 13px;
 }
 
+/* --- World map ------------------------------------------------------------- */
+
+.map-card {
+  width: min(640px, 94vw);
+}
+.map-tree {
+  margin-top: 10px;
+  overflow: auto;
+  max-height: 70vh;
+}
+.map-node {
+  padding-left: 4px;
+}
+.map-kids {
+  margin-left: 20px;
+  padding-left: 14px;
+  border-left: 2px solid rgba(185, 140, 255, 0.35);
+}
+.map-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--ui-fg);
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.map-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.map-chip.current {
+  border-color: var(--ui-accent);
+  background: rgba(255, 207, 92, 0.14);
+}
+.map-name {
+  font-weight: 650;
+}
+.map-meta {
+  color: var(--ui-dim);
+  font-size: 11.5px;
+}
+
 /* --- Settings modal -------------------------------------------------------- */
 
 .settings-modal {

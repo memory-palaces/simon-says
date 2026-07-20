@@ -35,6 +35,7 @@ export class HelpOverlay {
           <span>Go to a locus</span><span>Ctrl/Cmd+G</span>
           <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
           <span>Save</span><span>Ctrl/Cmd+S</span>
+          <span>World map</span><span>M</span>
           <span>This help</span><span>?</span>
         </div>
       </div>`;

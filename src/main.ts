@@ -15,6 +15,7 @@ import { Toasts } from './ui/toasts';
 import { openGoToDialog } from './ui/goToDialog';
 import { MeshPreview } from './ui/meshPreview';
 import { HelpOverlay } from './ui/help';
+import { MapOverlay } from './ui/mapOverlay';
 import { chooseAction } from './ui/choice';
 import {
   applyStyle,
@@ -64,6 +65,7 @@ class App {
   private readonly generateDialog = new GenerateDialog(this.mount);
   private readonly meshPreview = new MeshPreview();
   private readonly helpOverlay = new HelpOverlay(this.mount);
+  private readonly mapOverlay = new MapOverlay(this.mount, (path) => void this.jumpToWorld(path));
   private readonly settingsDialog = new SettingsDialog(this.mount, {
     setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
@@ -552,6 +554,15 @@ class App {
     if (e.key === '?') {
       e.preventDefault();
       this.helpOverlay.toggle();
+      return;
+    }
+
+    // 'M' toggles the world map (unless typing).
+    const mt = e.target as HTMLElement | null;
+    const inFieldNow = !!mt && (mt.tagName === 'INPUT' || mt.tagName === 'TEXTAREA');
+    if (!inFieldNow && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault();
+      this.mapOverlay.toggle(this.root, this.navStack.map((f) => f.portalId));
       return;
     }
 
@@ -1099,6 +1110,33 @@ class App {
       this.viewer.fp.setFlying(frame.flying);
       this.viewer.camera.position.copy(frame.camPos);
       this.viewer.camera.quaternion.copy(frame.camQuat);
+    });
+    this.updateReturnUi();
+    if (this.mode === 'edit') this.renderEditor();
+  }
+
+  /** Jump directly to a world by its portal path (from the map). */
+  private async jumpToWorld(path: string[]): Promise<void> {
+    this.mapOverlay.hide();
+    const frames: typeof this.navStack = [];
+    let p = this.root;
+    for (const portalId of path) {
+      const portal = p.portals?.find((x) => x.id === portalId);
+      if (!portal?.target) break;
+      frames.push({
+        portalId,
+        camPos: this.viewer.camera.position.clone(),
+        camQuat: this.viewer.camera.quaternion.clone(),
+        flying: this.viewer.fp.mode === 'fly',
+      });
+      p = portal.target;
+    }
+    this.navStack = frames;
+    const target = p;
+    await this.transition(async () => {
+      this.palace = target;
+      this.selectedId = null;
+      await this.enterPalaceGeometry();
     });
     this.updateReturnUi();
     if (this.mode === 'edit') this.renderEditor();
