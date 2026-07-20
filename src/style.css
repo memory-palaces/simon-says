@@ -361,21 +361,54 @@ canvas {
   flex: 1;
   display: flex;
   align-items: center;
+  /* Room below the 4px track for the default tick. */
+  padding-bottom: 8px;
 }
+/* Custom-styled range so the thumb is a known 14px — lets the default notch line
+   up exactly (native accent-color thumbs vary in width across browsers). */
 .slider-wrap input[type='range'] {
   flex: 1;
-  accent-color: var(--ui-accent);
   margin: 0;
+  height: 14px;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
 }
-/* A tick showing the default value; sits under the thumb's travel. */
+.slider-wrap input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.slider-wrap input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px; /* centre the 14px thumb on the 4px track */
+  border-radius: 50%;
+  background: var(--ui-accent);
+  border: none;
+}
+.slider-wrap input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.slider-wrap input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ui-accent);
+}
+/* A small tick BELOW the track marking the default value (never overlaps the knob). */
 .slider-notch {
   position: absolute;
-  top: 50%;
+  top: 3px; /* just under the 4px track */
   width: 2px;
-  height: 12px;
+  height: 7px;
   margin-left: -1px;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.55);
   border-radius: 1px;
   pointer-events: none;
 }

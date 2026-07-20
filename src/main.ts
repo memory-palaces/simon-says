@@ -742,8 +742,18 @@ class App {
   }
 
   private toggleScaleFigure(): void {
+    if (!this.viewer.hasModel) {
+      this.toasts.info('Load a model first to preview scale.');
+      return;
+    }
+    // The preview moves the camera, so release the pointer if it's captured.
+    if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
     const on = this.viewer.toggleScaleFigure(this.palace.environment?.playerScale ?? 1);
-    this.toasts.info(on ? 'Scale figure placed — a 1.8 m person at your player scale' : 'Scale figure hidden');
+    this.toasts.info(
+      on
+        ? 'Scale preview — drag Player scale to compare a person to the building; click 🚶 again to return'
+        : 'Returned from scale preview',
+    );
   }
 
   // --- Generation ------------------------------------------------------------

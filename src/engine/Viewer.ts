@@ -237,33 +237,50 @@ export class Viewer {
 
   private scaleFigure: THREE.Sprite | null = null;
   private scaleShadow: THREE.Mesh | null = null;
+  private scalePreview: {
+    savedPos: THREE.Vector3;
+    savedQuat: THREE.Quaternion;
+    box: THREE.Box3; // the model's bounds
+    wallX: number; // x of the face the person stands beside
+    personZ: number;
+    footY: number;
+  } | null = null;
+
+  get hasModel(): boolean {
+    return this.currentModel !== null;
+  }
+
+  get scalePreviewActive(): boolean {
+    return this.scalePreview !== null;
+  }
 
   /**
-   * Toggle a person-shaped scale reference. It stands squared-up beside the
-   * current model — on the model's ground plane, at the face turned toward you —
-   * so you can eyeball a 1.8 m person against the building as you slide the
-   * player scale. A soft contact shadow keeps it planted on the floor. Returns
-   * whether it is now visible.
+   * Toggle a scale-comparison preview: swing the camera out to frame the whole
+   * model and stand a 1.8 m (× player scale) person right beside it, so you can
+   * eyeball how big "you" are against the building while dragging the Player-scale
+   * slider. Toggle again to fly straight back to where you were. Returns whether
+   * the preview is now active.
    */
   toggleScaleFigure(playerScale: number): boolean {
-    if (this.scaleFigure) {
-      this.scene.remove(this.scaleFigure);
-      (this.scaleFigure.material as THREE.SpriteMaterial).map?.dispose();
-      this.scaleFigure.material.dispose();
-      this.scaleFigure = null;
-      if (this.scaleShadow) {
-        this.scene.remove(this.scaleShadow);
-        (this.scaleShadow.material as THREE.MeshBasicMaterial).map?.dispose();
-        (this.scaleShadow.material as THREE.Material).dispose();
-        this.scaleShadow.geometry.dispose();
-        this.scaleShadow = null;
-      }
+    if (this.scalePreview) {
+      this.exitScalePreview();
       return false;
     }
+    if (!this.currentModel) return false; // nothing to compare against
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    this.scalePreview = {
+      savedPos: this.camera.position.clone(),
+      savedQuat: this.camera.quaternion.clone(),
+      box,
+      wallX: box.max.x,
+      personZ: box.getCenter(new THREE.Vector3()).z,
+      footY: box.min.y,
+    };
+
     const fig = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: personTexture(), transparent: true, depthWrite: false, toneMapped: false }),
     );
-    fig.center.set(0.5, 0); // anchor at the feet so it stands on the floor
+    fig.center.set(0.5, 0); // anchor at the feet so it stands on the ground
     this.scene.add(fig);
     this.scaleFigure = fig;
 
@@ -277,41 +294,62 @@ export class Viewer {
     this.scene.add(shadow);
     this.scaleShadow = shadow;
 
-    this.placeScaleFigure(playerScale);
     this.setScaleFigureScale(playerScale);
     return true;
   }
 
-  /** Stand the figure on the floor a short way in front of you, always in view. */
-  private placeScaleFigure(playerScale: number): void {
-    if (!this.scaleFigure) return;
-    const h = 1.8 * Math.max(0.05, playerScale);
-    // Farther back for a bigger figure so it's framed, not clipping the camera.
-    const dist = THREE.MathUtils.clamp(h * 2.4, 2.5, 14);
-    this.camera.getWorldDirection(this.camDir);
-    const horiz = new THREE.Vector3(this.camDir.x, 0, this.camDir.z);
-    if (horiz.lengthSq() < 1e-4) horiz.set(0, 0, 1);
-    horiz.normalize();
-    const spot = this.camera.position.clone().addScaledVector(horiz, dist);
-
-    // Drop to the floor beneath that spot; fall back to standing height if there's
-    // no geometry below (e.g. an empty world).
-    let floorY = this.camera.position.y - this.fp.eyeOffset;
-    if (this.currentModel) {
-      this.pickRay.set(new THREE.Vector3(spot.x, this.camera.position.y + Math.max(3, h), spot.z), new THREE.Vector3(0, -1, 0));
-      this.pickRay.far = Infinity;
-      const hits = this.pickRay.intersectObject(this.currentModel, true);
-      if (hits.length > 0) floorY = hits[0].point.y;
+  private exitScalePreview(): void {
+    if (this.scaleFigure) {
+      this.scene.remove(this.scaleFigure);
+      (this.scaleFigure.material as THREE.SpriteMaterial).map?.dispose();
+      this.scaleFigure.material.dispose();
+      this.scaleFigure = null;
     }
-    this.scaleFigure.position.set(spot.x, floorY, spot.z);
-    if (this.scaleShadow) this.scaleShadow.position.set(spot.x, floorY + 0.02, spot.z);
+    if (this.scaleShadow) {
+      this.scene.remove(this.scaleShadow);
+      (this.scaleShadow.material as THREE.MeshBasicMaterial).map?.dispose();
+      (this.scaleShadow.material as THREE.Material).dispose();
+      this.scaleShadow.geometry.dispose();
+      this.scaleShadow = null;
+    }
+    if (this.scalePreview) {
+      this.camera.position.copy(this.scalePreview.savedPos);
+      this.camera.quaternion.copy(this.scalePreview.savedQuat);
+      this.camera.updateMatrixWorld();
+      this.fp.teleport(this.scalePreview.savedPos);
+      this.scalePreview = null;
+    }
   }
 
+  /** Resize the preview person and reframe the camera to keep it + the model in view. */
   setScaleFigureScale(playerScale: number): void {
-    if (!this.scaleFigure) return;
-    const h = 1.8 * playerScale; // an average person, scaled with the player
-    this.scaleFigure.scale.set(0.42 * h, h, 1);
-    if (this.scaleShadow) this.scaleShadow.scale.setScalar(Math.max(0.35, 0.42 * h));
+    if (!this.scaleFigure || !this.scalePreview) return;
+    const { wallX, personZ, footY, box } = this.scalePreview;
+    const h = 1.8 * Math.max(0.05, playerScale);
+    const w = 0.42 * h;
+    this.scaleFigure.scale.set(w, h, 1);
+
+    // Stand the person just clear of the model's +X face.
+    const figX = wallX + w * 0.5 + 0.4;
+    this.scaleFigure.position.set(figX, footY, personZ);
+    if (this.scaleShadow) {
+      this.scaleShadow.position.set(figX, footY + 0.02, personZ);
+      this.scaleShadow.scale.setScalar(Math.max(0.35, w));
+    }
+
+    // Frame both the model and the (possibly giant) person, 3/4-on.
+    const framed = box.clone();
+    framed.expandByPoint(new THREE.Vector3(figX + w * 0.5, footY, personZ));
+    framed.expandByPoint(new THREE.Vector3(figX, footY + h, personZ));
+    const center = framed.getCenter(new THREE.Vector3());
+    const size = framed.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = (this.camera.fov * Math.PI) / 180;
+    const dist = (maxDim / 2 / Math.tan(fov / 2)) * 1.35 + maxDim * 0.15;
+    const dir = new THREE.Vector3(1, 0.5, 1).normalize();
+    this.camera.position.copy(center).addScaledVector(dir, dist);
+    this.camera.lookAt(center.x, center.y - size.y * 0.08, center.z);
+    this.camera.updateMatrixWorld();
   }
 
   /** Apply a palace's environment (background + fog colour), or the default. */

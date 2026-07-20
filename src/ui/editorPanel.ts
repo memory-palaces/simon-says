@@ -632,7 +632,7 @@ function sliderRow(opts: {
   // Notch at the default position. The thumb centre only travels between half a
   // thumb-width in from each end, so offset by that (≈THUMB px) or the mark drifts
   // off the knob toward the extremes.
-  const THUMB = 16;
+  const THUMB = 14; // matches the styled thumb width in style.css
   const notch = div('slider-notch');
   const frac = Math.max(0, Math.min(1, (opts.def - opts.min) / (opts.max - opts.min)));
   notch.style.left = `calc(${THUMB / 2}px + ${frac.toFixed(4)} * (100% - ${THUMB}px))`;
