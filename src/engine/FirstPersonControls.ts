@@ -105,8 +105,25 @@ export class FirstPersonControls {
   }
 
   setFlying(on: boolean): void {
-    this.flying = on;
     this.velocityY = 0;
+    if (!on && this.colliders.length > 0) {
+      // Entering walk: snap onto the floor directly below so we don't free-fall
+      // from fly height (that's the "shooting off the platform" feeling). Use the
+      // actual geometry under our current X/Z — never assume the model sits at the
+      // origin. If there's nothing to stand on here, stay flying rather than
+      // dropping into the void.
+      const feetY = this.camera.position.y - this.eyeHeight;
+      this.probeOrigin.set(this.camera.position.x, feetY + this.stepHeight, this.camera.position.z);
+      this.ray.set(this.probeOrigin, this.down);
+      this.ray.far = this.groundProbeFar;
+      const hits = this.ray.intersectObjects(this.colliders, true);
+      if (hits.length === 0) {
+        this.flying = true;
+        return;
+      }
+      this.camera.position.y = hits[0].point.y + this.eyeHeight;
+    }
+    this.flying = on;
   }
 
   /** Per-world player scale: <1 shrinks you (space feels huge), >1 makes you a giant. */
@@ -264,8 +281,7 @@ export class FirstPersonControls {
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (e.code === 'KeyF') {
-      this.flying = !this.flying;
-      this.velocityY = 0;
+      this.setFlying(!this.flying); // snaps to the floor when entering walk
       return;
     }
     this.keys.add(e.code);

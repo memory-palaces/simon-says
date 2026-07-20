@@ -629,10 +629,13 @@ function sliderRow(opts: {
   rng.value = String(opts.value);
   rng.title = 'double-click to reset to default';
 
-  // Notch at the default position (percentage along the track).
+  // Notch at the default position. The thumb centre only travels between half a
+  // thumb-width in from each end, so offset by that (≈THUMB px) or the mark drifts
+  // off the knob toward the extremes.
+  const THUMB = 16;
   const notch = div('slider-notch');
-  const pct = ((opts.def - opts.min) / (opts.max - opts.min)) * 100;
-  notch.style.left = `${Math.max(0, Math.min(100, pct))}%`;
+  const frac = Math.max(0, Math.min(1, (opts.def - opts.min) / (opts.max - opts.min)));
+  notch.style.left = `calc(${THUMB / 2}px + ${frac.toFixed(4)} * (100% - ${THUMB}px))`;
   notch.title = `default ${opts.def}`;
   wrap.append(rng, notch);
 

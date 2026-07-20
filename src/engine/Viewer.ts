@@ -277,34 +277,31 @@ export class Viewer {
     this.scene.add(shadow);
     this.scaleShadow = shadow;
 
-    this.placeScaleFigure();
+    this.placeScaleFigure(playerScale);
     this.setScaleFigureScale(playerScale);
     return true;
   }
 
-  /** Position the figure on the model's ground, at the side facing the camera. */
-  private placeScaleFigure(): void {
+  /** Stand the figure on the floor a short way in front of you, always in view. */
+  private placeScaleFigure(playerScale: number): void {
     if (!this.scaleFigure) return;
-    let spot: THREE.Vector3;
-    let floorY: number;
+    const h = 1.8 * Math.max(0.05, playerScale);
+    // Farther back for a bigger figure so it's framed, not clipping the camera.
+    const dist = THREE.MathUtils.clamp(h * 2.4, 2.5, 14);
+    this.camera.getWorldDirection(this.camDir);
+    const horiz = new THREE.Vector3(this.camDir.x, 0, this.camDir.z);
+    if (horiz.lengthSq() < 1e-4) horiz.set(0, 0, 1);
+    horiz.normalize();
+    const spot = this.camera.position.clone().addScaledVector(horiz, dist);
+
+    // Drop to the floor beneath that spot; fall back to standing height if there's
+    // no geometry below (e.g. an empty world).
+    let floorY = this.camera.position.y - this.fp.eyeOffset;
     if (this.currentModel) {
-      const box = new THREE.Box3().setFromObject(this.currentModel);
-      const center = box.getCenter(new THREE.Vector3());
-      const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-      const dir = new THREE.Vector3().subVectors(this.camera.position, center);
-      dir.y = 0;
-      if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
-      dir.normalize();
-      // March from the centre out to whichever bounding face `dir` hits first.
-      const tX = Math.abs(dir.x) > 1e-4 ? half.x / Math.abs(dir.x) : Infinity;
-      const tZ = Math.abs(dir.z) > 1e-4 ? half.z / Math.abs(dir.z) : Infinity;
-      const t = Math.min(tX, tZ);
-      spot = center.addScaledVector(dir, t + 0.6); // stand just outside the wall
-      floorY = box.min.y;
-    } else {
-      this.camera.getWorldDirection(this.camDir);
-      spot = this.camera.position.clone().addScaledVector(new THREE.Vector3(this.camDir.x, 0, this.camDir.z).normalize(), 3);
-      floorY = this.camera.position.y - this.fp.eyeOffset;
+      this.pickRay.set(new THREE.Vector3(spot.x, this.camera.position.y + Math.max(3, h), spot.z), new THREE.Vector3(0, -1, 0));
+      this.pickRay.far = Infinity;
+      const hits = this.pickRay.intersectObject(this.currentModel, true);
+      if (hits.length > 0) floorY = hits[0].point.y;
     }
     this.scaleFigure.position.set(spot.x, floorY, spot.z);
     if (this.scaleShadow) this.scaleShadow.position.set(spot.x, floorY + 0.02, spot.z);

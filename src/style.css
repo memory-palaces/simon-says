@@ -380,13 +380,23 @@ canvas {
   pointer-events: none;
 }
 .slider-num {
-  width: 54px;
+  width: 52px;
+  flex: 0 0 auto;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 6px;
   color: var(--ui-fg);
   font-size: 12px;
   padding: 3px 5px;
+  text-align: right;
+  /* Trim the native number spinners so the digits sit flush right and align. */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.slider-num::-webkit-outer-spin-button,
+.slider-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .editor-controls {
