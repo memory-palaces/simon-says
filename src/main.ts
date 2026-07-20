@@ -14,6 +14,7 @@ import { SettingsDialog } from './ui/settingsDialog';
 import { Toasts } from './ui/toasts';
 import { openGoToDialog } from './ui/goToDialog';
 import { MeshPreview } from './ui/meshPreview';
+import { HelpOverlay } from './ui/help';
 import { chooseAction } from './ui/choice';
 import {
   applyStyle,
@@ -60,6 +61,7 @@ class App {
   private readonly toasts = new Toasts(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
   private readonly meshPreview = new MeshPreview();
+  private readonly helpOverlay = new HelpOverlay(this.mount);
   private readonly settingsDialog = new SettingsDialog(this.mount, {
     setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
@@ -494,12 +496,12 @@ class App {
   private updateWalkHud(): void {
     const n = this.palace.loci.length;
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
-    if (this.movingId) parts.push('moving — [E] drop');
+    if (this.movingId) parts.push('moving — [T] drop');
     else if (this.targetedId) {
       const t = this.palace.loci.find((l) => l.id === this.targetedId);
       const name = t?.label ? `“${t.label}”` : 'marker';
-      parts.push(`${name} — [X] delete  [G] move${t?.child_palace ? '  [Enter] enter' : ''}`);
-    } else parts.push('[E] drop a locus');
+      parts.push(`${name} — [B] delete  [G] move${t?.child_palace ? '  [Enter] enter' : ''}`);
+    } else parts.push('[T] drop a locus · [?] help');
     if (this.navStack.length > 0) parts.push('[Backspace] return');
     parts.push(this.viewer.fp.mode === 'fly' ? 'fly' : 'walk');
     this.overlay.setHud(parts.join('   ·   '));
@@ -532,12 +534,28 @@ class App {
       }
     }
 
+    // '?' shows the controls cheat-sheet in any mode.
+    if (e.key === '?') {
+      e.preventDefault();
+      this.helpOverlay.toggle();
+      return;
+    }
+
+    // [ / ] jump to the previous / next locus (unless typing in a field).
+    const tgt = e.target as HTMLElement | null;
+    const typing = !!tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA');
+    if (!typing && (e.key === '[' || e.key === ']')) {
+      e.preventDefault();
+      this.selectAdjacent(e.key === ']' ? 1 : -1);
+      return;
+    }
+
     if (this.mode === 'walk') {
-      if (e.code === 'KeyE') this.dropOrPlace();
-      else if (e.code === 'KeyX') this.deleteTargeted();
+      if (e.code === 'KeyT') this.dropOrPlace();
+      else if (e.code === 'KeyB') this.deleteTargeted();
       else if (e.code === 'KeyG') this.toggleMove();
       else if (e.code === 'KeyR') this.viewer.recenter();
-      else if (e.code === 'KeyV') this.toggleXray();
+      else if (e.code === 'KeyX') this.toggleXray();
       else if (e.code === 'Enter' && this.targetedId) {
         // Only descend into an EXISTING child; creating one stays explicit (panel).
         const l = this.palace.loci.find((x) => x.id === this.targetedId);
@@ -614,9 +632,22 @@ class App {
   }
 
   private select(id: string): void {
-    this.selectedId = id;
-    this.loci.setSelected(id);
+    this.selectedId = id || null; // '' collapses the open detail
+    this.loci.setSelected(this.selectedId);
     this.renderEditor();
+  }
+
+  /** Cycle the selection to the previous/next locus and fly to it. */
+  private selectAdjacent(dir: 1 | -1): void {
+    const ordered = lociInOrder(this.palace);
+    if (ordered.length === 0) return;
+    const cur = ordered.findIndex((l) => l.id === this.selectedId);
+    const i = cur < 0 ? (dir > 0 ? 0 : ordered.length - 1) : (cur + dir + ordered.length) % ordered.length;
+    const l = ordered[i];
+    this.selectedId = l.id;
+    this.loci.setSelected(l.id);
+    this.gotoLocus(l.id);
+    if (this.mode === 'edit') this.renderEditor();
   }
 
   private mutateLocus(id: string, fn: (l: Locus) => void, rerender = true): void {
@@ -961,6 +992,7 @@ class App {
     horiz.normalize();
     const viewPos = pos.clone().addScaledVector(horiz, 2.2);
     viewPos.y = pos.y + 0.8;
+    this.viewer.fp.setFlying(true); // float at the target, don't drop
     this.viewer.teleportTo(viewPos, pos);
   }
 
@@ -1014,7 +1046,10 @@ class App {
     const locus = this.palace.loci.find((l) => l.id === locusId);
     if (!locus) return;
     if (!locus.child_palace) {
-      locus.child_palace = createEmptyPalace(locus.label || 'Inner space');
+      const child = createEmptyPalace(locus.label || 'Inner world');
+      // Inherit the parent world's image pipeline + style so it isn't reset to None.
+      if (this.palace.generation) child.generation = { ...this.palace.generation };
+      locus.child_palace = child;
       this.checkpoint();
     }
     const child = locus.child_palace!; // guaranteed non-null after the block above

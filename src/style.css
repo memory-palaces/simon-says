@@ -431,6 +431,27 @@ canvas {
   justify-content: center;
 }
 
+.locus-num.clickable {
+  cursor: pointer;
+}
+.locus-num.clickable:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 2px rgba(255, 207, 92, 0.5);
+}
+.locus-door {
+  color: #c9adff;
+  margin-right: 4px;
+}
+.rot-num {
+  width: 54px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: var(--ui-fg);
+  font-size: 12px;
+  padding: 3px 5px;
+}
+
 .locus-text {
   flex: 1 1 auto;
   min-width: 0;

@@ -97,8 +97,8 @@ export interface Palace {
   generation?: WorldGeneration;
 }
 
-/** A dark slate instead of pure black — less "abyss", still lets geometry pop. */
-export const DEFAULT_BACKGROUND = '#20242c';
+/** A soft daylight blue — cheerful and lets geometry read well. */
+export const DEFAULT_BACKGROUND = '#9fb8d6';
 
 export const IDENTITY_MAT4: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 

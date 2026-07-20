@@ -129,10 +129,11 @@ export class SettingsDialog {
       <span>Fly / no-clip</span><span>F <em>(fly = pass through walls)</em></span>
       <span>Fly up / down</span><span>Space / C</span>
       <span>Fly ⇄ walk (gravity)</span><span>F</span>
-      <span>Drop a locus</span><span>E</span>
-      <span>Delete / move locus</span><span>X / G <em>(aim at a marker)</em></span>
+      <span>Drop a locus</span><span>T</span>
+      <span>Delete / move locus</span><span>B / G <em>(aim at a marker)</em></span>
       <span>Recenter on floor</span><span>R</span>
-      <span>X-ray (all pins through walls)</span><span>V</span>
+      <span>X-ray (all pins through walls)</span><span>X</span>
+      <span>Show controls help</span><span>?</span>
       <span>Enter inner world (aim at doorway pin)</span><span>Enter</span>
       <span>Return to parent world</span><span>Backspace</span>
       <span>Open locus editor</span><span>click a marker</span>

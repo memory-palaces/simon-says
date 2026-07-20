@@ -216,12 +216,15 @@ export class FirstPersonControls {
     const hits = this.ray.intersectObjects(this.colliders, true);
 
     if (hits.length === 0) {
-      // Nothing below (off the edge of the map) — fall, but clamp so it isn't endless.
+      // Nothing below (walked off the edge) — fall, but when we bottom out in the
+      // void, switch to fly so the player can recover instead of being stuck under
+      // a floating building. (These models often sit well above y=0.)
       this.fall(dt);
       if (this.camera.position.y - this.eyeHeight <= this.floorFloorY) {
         this.camera.position.y = this.floorFloorY + this.eyeHeight;
         this.velocityY = 0;
         this.onGround = true;
+        this.flying = true; // auto-recover: fly back up (press F to walk again)
       }
       return;
     }

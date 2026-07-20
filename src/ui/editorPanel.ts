@@ -190,8 +190,8 @@ export class EditorPanel {
     const hint = div('editor-hint');
     hint.innerHTML =
       palace.loci.length === 0
-        ? 'No loci yet. Press <b>▶ Enter</b>, look at a wall or object, and press <kbd>E</kbd> to drop one.'
-        : 'Click a locus to edit it. In walk mode: <kbd>E</kbd> drop · look at a marker then <kbd>X</kbd> delete / <kbd>G</kbd> move.';
+        ? 'No loci yet. Press <b>▶ Enter</b>, look at a wall or object, and press <kbd>T</kbd> to drop one. <kbd>?</kbd> for all controls.'
+        : 'Click a #number to fly to it, a title to collapse. In walk mode: <kbd>T</kbd> drop · aim at a marker then <kbd>B</kbd> delete / <kbd>G</kbd> move.';
     this.root.appendChild(hint);
 
     // --- Route list ------------------------------------------------------------
@@ -200,19 +200,30 @@ export class EditorPanel {
     for (const locus of ordered) {
       const row = div('locus-row' + (locus.id === selectedId ? ' selected' : ''));
 
-      const num = div('locus-num');
+      // Click the number to fly to the locus.
+      const num = div('locus-num clickable');
       num.textContent = String(locus.order);
+      num.title = 'Fly to this locus';
+      num.onclick = () => this.handlers.teleport(locus.id);
       row.appendChild(num);
 
       const text = div('locus-text');
       const labelEl = div('locus-label');
       labelEl.textContent = locus.label || '(unlabeled location)';
       if (!locus.label) labelEl.classList.add('empty');
+      if (locus.child_palace) {
+        const badge = document.createElement('span');
+        badge.className = 'locus-door';
+        badge.textContent = '↳';
+        badge.title = 'has an inner world';
+        labelEl.prepend(badge);
+      }
       const promptEl = div('locus-prompt');
       promptEl.textContent = locus.image_prompt || 'no mnemonic yet';
       if (!locus.image_prompt) promptEl.classList.add('empty');
       text.append(labelEl, promptEl);
-      text.onclick = () => this.handlers.selectLocus(locus.id);
+      // Click the title to open, or collapse if it's already the open one.
+      text.onclick = () => this.handlers.selectLocus(locus.id === selectedId ? '' : locus.id);
       row.appendChild(text);
       this.rowLabels.set(locus.id, labelEl);
       this.rowPrompts.set(locus.id, promptEl);
@@ -254,12 +265,13 @@ export class EditorPanel {
     row.appendChild(color);
 
     const presets: Array<[string, string]> = [
-      ['Slate', DEFAULT_BACKGROUND],
+      ['Sky', DEFAULT_BACKGROUND],
+      ['Mint', '#bfe3d0'],
+      ['Peach', '#f2d6c0'],
+      ['Lavender', '#d7cef0'],
+      ['Sand', '#e9dcc3'],
+      ['Slate', '#20242c'],
       ['Abyss', '#0a0a0b'],
-      ['Sky', '#9fb8d6'],
-      ['Dusk', '#3a2f4a'],
-      ['Warm', '#2a2320'],
-      ['Studio', '#464c55'],
     ];
     for (const [name, hex] of presets) {
       const sw = document.createElement('button');
@@ -286,6 +298,11 @@ export class EditorPanel {
     bright.step = '0.1';
     bright.value = String(palace.environment?.brightness ?? 1);
     bright.oninput = () => this.handlers.setBrightness(parseFloat(bright.value));
+    bright.ondblclick = () => {
+      bright.value = '1';
+      this.handlers.setBrightness(1);
+    };
+    bright.title = 'double-click to reset';
     brightRow.append(brightLabel, bright);
     wrap.appendChild(brightRow);
 
@@ -301,6 +318,11 @@ export class EditorPanel {
     scale.step = '0.1';
     scale.value = String(palace.environment?.playerScale ?? 1);
     scale.oninput = () => this.handlers.setPlayerScale(parseFloat(scale.value));
+    scale.ondblclick = () => {
+      scale.value = '1';
+      this.handlers.setPlayerScale(1);
+    };
+    scale.title = 'double-click to reset';
     scaleRow.append(scaleLabel, scale);
     wrap.appendChild(scaleRow);
     return wrap;
@@ -371,11 +393,17 @@ export class EditorPanel {
       rng.step = '0.1';
       rng.value = String(locus.object_scale ?? 1);
       rng.oninput = () => this.handlers.setObjectScale(locus.id, parseFloat(rng.value));
+      rng.ondblclick = () => {
+        rng.value = '1';
+        this.handlers.setObjectScale(locus.id, 1);
+      };
+      rng.title = 'double-click to reset';
       scaleRow.append(lab, rng);
       wrap.appendChild(scaleRow);
     }
 
-    // Coarse rotation for a 3D mesh (images are camera-facing billboards, no rotation).
+    // Rotation for a 3D mesh (images are camera-facing billboards, no rotation).
+    // Slider + exact number box; double-click the slider to reset to 0.
     if (locus.mesh_3d) {
       const rot = locus.object_rotation ?? [0, 0, 0];
       ['Rotate X', 'Rotate Y', 'Rotate Z'].forEach((label, axis) => {
@@ -383,14 +411,28 @@ export class EditorPanel {
         const lab = document.createElement('span');
         lab.className = 'bright-label';
         lab.textContent = label;
+        const num = document.createElement('input');
+        num.type = 'number';
+        num.className = 'rot-num';
+        num.min = '-180';
+        num.max = '180';
+        num.step = '5';
+        num.value = String(rot[axis]);
         const rng = document.createElement('input');
         rng.type = 'range';
         rng.min = '-180';
         rng.max = '180';
         rng.step = '5';
         rng.value = String(rot[axis]);
-        rng.oninput = () => this.handlers.setObjectRotation(locus.id, axis, parseFloat(rng.value));
-        row.append(lab, rng);
+        const apply = (v: number) => {
+          rng.value = String(v);
+          num.value = String(v);
+          this.handlers.setObjectRotation(locus.id, axis, v);
+        };
+        rng.oninput = () => apply(parseFloat(rng.value));
+        num.oninput = () => apply(parseFloat(num.value) || 0);
+        rng.ondblclick = () => apply(0);
+        row.append(lab, rng, num);
         wrap.appendChild(row);
       });
     }
