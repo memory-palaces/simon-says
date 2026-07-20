@@ -228,6 +228,9 @@ export class Viewer {
       // Face normals are object-local; bring them to world space via the normal matrix.
       this.normalMat.getNormalMatrix(hit.object.matrixWorld);
       normal.copy(hit.face.normal).applyNormalMatrix(this.normalMat).normalize();
+      // Models often have outward-facing wall normals; flip so the normal points back
+      // toward the player, so markers/portals sit on the side you're standing on.
+      if (normal.dot(this.camDir) > 0) normal.negate();
     }
     return { point: hit.point.clone(), normal };
   }

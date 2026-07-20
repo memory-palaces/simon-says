@@ -126,7 +126,8 @@ export class LociLayer {
       const pm = this.portalMarkers.get(portal.id) ?? this.createPortal(portal.id);
       this.v.set(portal.local_position[0], portal.local_position[1], portal.local_position[2]).applyMatrix4(root.matrixWorld);
       this.n.set(portal.local_normal[0], portal.local_normal[1], portal.local_normal[2]).transformDirection(root.matrixWorld).normalize();
-      pm.group.position.copy(this.v).addScaledVector(this.n, 0.06);
+      // Float the ring off the surface (into the room) so it doesn't straddle the wall.
+      pm.group.position.copy(this.v).addScaledVector(this.n, 0.4);
       pm.ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.n);
     }
     for (const [id, pm] of this.portalMarkers) {

@@ -516,7 +516,7 @@ class App {
       const name = t?.label ? `“${t.label}”` : 'marker';
       parts.push(`${name} — [B] delete  [G] move`);
     } else parts.push('[T] locus · [P] portal · [?] help');
-    if (this.navStack.length > 0) parts.push('[Backspace] return');
+    if (this.navStack.length > 0) parts.push('[Q] return');
     parts.push(this.viewer.fp.mode === 'fly' ? 'fly' : 'walk');
     this.overlay.setHud(parts.join('   ·   '));
   }
@@ -572,10 +572,7 @@ class App {
       else if (e.code === 'KeyX') this.toggleXray();
       else if (e.code === 'KeyP') this.placePortal();
       else if (e.code === 'Enter' && this.targetedPortalId) void this.enterPortal(this.targetedPortalId);
-      else if (e.code === 'Backspace') {
-        e.preventDefault(); // stop Firefox from navigating back
-        void this.returnToParent();
-      }
+      else if (e.code === 'KeyQ') void this.returnToParent(); // Q, not Backspace (avoids browser-back)
     } else if (this.mode === 'review') {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
@@ -1088,7 +1085,7 @@ class App {
     });
     this.updateReturnUi();
     if (this.mode === 'edit') this.renderEditor();
-    this.toasts.info(`Entered “${this.palace.name}” — Backspace to return`);
+    this.toasts.info(`Entered “${this.palace.name}” — Q to return`);
   }
 
   /** Pop back up to the parent world, restoring its geometry and camera. */

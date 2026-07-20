@@ -131,7 +131,7 @@ export class EditorPanel {
       const crumb = div('nest-crumb');
       crumb.textContent = this.nesting.trail.join('  ›  ');
       const back = button('▲ Return', '', () => this.handlers.returnToParent());
-      back.title = 'Return to parent world (Backspace)';
+      back.title = 'Return to parent world (Q)';
       bar.append(crumb, back);
       this.root.appendChild(bar);
     }

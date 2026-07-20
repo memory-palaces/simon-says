@@ -30,7 +30,7 @@ export class HelpOverlay {
           <span>Delete a locus</span><span>B <em>(aim at a marker)</em></span>
           <span>Drop a portal</span><span>P</span>
           <span>Go through a portal</span><span>Enter <em>(aim at a portal)</em></span>
-          <span>Return to parent world</span><span>Backspace</span>
+          <span>Return to parent world</span><span>Q</span>
           <span>Previous / next locus</span><span>[ / ]</span>
           <span>Go to a locus</span><span>Ctrl/Cmd+G</span>
           <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
