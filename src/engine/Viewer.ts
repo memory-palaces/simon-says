@@ -376,8 +376,53 @@ export class Viewer {
 
   /** Point the camera at a target from a given position (used by review mode). */
   teleportTo(position: THREE.Vector3, lookAt: THREE.Vector3): void {
+    this.trans = null;
     this.fp.teleport(position);
     this.camera.lookAt(lookAt);
+  }
+
+  private trans: {
+    fromP: THREE.Vector3;
+    toP: THREE.Vector3;
+    fromQ: THREE.Quaternion;
+    toQ: THREE.Quaternion;
+    t: number;
+    dur: number;
+  } | null = null;
+  private readonly lookMat = new THREE.Matrix4();
+
+  /**
+   * Glide the camera to `position` looking at `lookAt` over `durationMs`
+   * (eased). durationMs <= 0 jumps instantly. Used by go-to / next-prev /
+   * recenter so switching loci isn't a jarring cut.
+   */
+  flyTo(position: THREE.Vector3, lookAt: THREE.Vector3, durationMs: number): void {
+    if (durationMs <= 0) {
+      this.teleportTo(position, lookAt);
+      return;
+    }
+    const toP = position.clone();
+    this.lookMat.lookAt(toP, lookAt, this.camera.up);
+    this.trans = {
+      fromP: this.camera.position.clone(),
+      toP,
+      fromQ: this.camera.quaternion.clone(),
+      toQ: new THREE.Quaternion().setFromRotationMatrix(this.lookMat),
+      t: 0,
+      dur: durationMs / 1000,
+    };
+    this.fp.teleport(this.camera.position.clone()); // zero fall velocity so gravity doesn't fight the glide
+  }
+
+  private advanceTransition(dt: number): void {
+    const tr = this.trans;
+    if (!tr) return;
+    tr.t += dt;
+    const k = tr.dur > 0 ? Math.min(1, tr.t / tr.dur) : 1;
+    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; // easeInOutQuad
+    this.camera.position.lerpVectors(tr.fromP, tr.toP, e);
+    this.camera.quaternion.slerpQuaternions(tr.fromQ, tr.toQ, e);
+    if (k >= 1) this.trans = null;
   }
 
   /** Run a callback every rendered frame (e.g. the editor updating its crosshair target). */
@@ -392,6 +437,7 @@ export class Viewer {
       // Clamp dt so a background tab that pauses rAF doesn't teleport us on return.
       const dt = Math.min(this.clock.getDelta(), 0.05);
       this.fp.update(dt);
+      this.advanceTransition(dt); // scripted camera glide overrides fp for its duration
       for (const cb of this.frameCallbacks) cb(dt);
       this.renderer.render(this.scene, this.camera);
     };

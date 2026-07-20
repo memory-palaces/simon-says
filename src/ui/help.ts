@@ -1,45 +1,40 @@
-/** A dismissible controls cheat-sheet, toggled with '?' from anywhere. */
+/**
+ * A controls cheat-sheet toggled with '?'. It docks to the side as a
+ * non-blocking reference (pointer-events off), so you can leave it up and keep
+ * walking around — it never steals the pointer lock or dims the scene.
+ */
 export class HelpOverlay {
   private readonly root: HTMLElement;
   private open = false;
 
   constructor(mount: HTMLElement) {
     this.root = document.createElement('div');
-    this.root.className = 'settings-modal';
-    this.root.onclick = (e) => {
-      if (e.target === this.root) this.hide();
-    };
+    this.root.className = 'help-panel';
     this.root.innerHTML = `
-      <div class="settings-card">
-        <div class="settings-header">
-          <div class="settings-title">Controls</div>
-          <button class="icon-btn help-close" title="Close">✕</button>
-        </div>
-        <div class="ctrl-grid">
-          <span>Move</span><span>WASD / arrow keys</span>
-          <span>Look around</span><span>mouse (right-click / Esc releases)</span>
-          <span>Run</span><span>Shift</span>
-          <span>Jump</span><span>Space</span>
-          <span>Fly ⇄ walk</span><span>F <em>(fly = pass through walls)</em></span>
-          <span>Fly up / down</span><span>Space / C</span>
-          <span>Zoom (dolly)</span><span>mouse wheel</span>
-          <span>Recenter on floor</span><span>R</span>
-          <span>X-ray all pins</span><span>X</span>
-          <span>Drop a locus</span><span>T</span>
-          <span>Move a locus</span><span>G <em>(aim at a marker)</em></span>
-          <span>Delete a locus</span><span>B <em>(aim at a marker)</em></span>
-          <span>Drop a portal</span><span>P</span>
-          <span>Go through a portal</span><span>Enter <em>(aim at a portal)</em></span>
-          <span>Return to parent world</span><span>Q</span>
-          <span>Previous / next locus</span><span>[ / ]</span>
-          <span>Go to a locus</span><span>Ctrl/Cmd+G</span>
-          <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
-          <span>Save</span><span>Ctrl/Cmd+S</span>
-          <span>World map</span><span>M</span>
-          <span>This help</span><span>?</span>
-        </div>
+      <div class="help-title">Controls <span class="help-hint">? to hide</span></div>
+      <div class="ctrl-grid">
+        <span>Move</span><span>WASD / arrows</span>
+        <span>Look around</span><span>mouse <em>(right-click / Esc releases)</em></span>
+        <span>Run</span><span>Shift</span>
+        <span>Jump</span><span>Space</span>
+        <span>Fly ⇄ walk</span><span>F <em>(fly = pass through walls)</em></span>
+        <span>Fly up / down</span><span>Space / C</span>
+        <span>Zoom (dolly)</span><span>mouse wheel or { / }</span>
+        <span>Recenter on #1</span><span>R</span>
+        <span>X-ray all pins</span><span>X</span>
+        <span>Drop a locus</span><span>T</span>
+        <span>Move a locus</span><span>G <em>(aim at a marker)</em></span>
+        <span>Delete a locus</span><span>B <em>(aim at a marker)</em></span>
+        <span>Drop a portal</span><span>P</span>
+        <span>Go through a portal</span><span>Enter <em>(aim at a portal)</em></span>
+        <span>Return to parent world</span><span>Q</span>
+        <span>Previous / next locus</span><span>[ / ]</span>
+        <span>Go to a locus / portal</span><span>Ctrl/Cmd+G</span>
+        <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
+        <span>Save</span><span>Ctrl/Cmd+S</span>
+        <span>World map</span><span>M</span>
+        <span>This help</span><span>?</span>
       </div>`;
-    (this.root.querySelector('.help-close') as HTMLButtonElement).onclick = () => this.hide();
     mount.appendChild(this.root);
     this.hide();
   }
@@ -49,7 +44,7 @@ export class HelpOverlay {
   }
   show(): void {
     this.open = true;
-    this.root.style.display = 'flex';
+    this.root.style.display = 'block';
   }
   hide(): void {
     this.open = false;

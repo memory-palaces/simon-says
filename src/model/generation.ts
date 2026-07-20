@@ -342,6 +342,8 @@ const SETTINGS_KEY = 'mempal:generation:v1';
 export interface GenerationSettings {
   local?: LocalConfig;
   fal?: FalConfig;
+  /** Milliseconds for the go-to / recenter camera glide (0 = instant). */
+  transitionMs?: number;
 }
 
 export function loadGenerationSettings(): GenerationSettings {

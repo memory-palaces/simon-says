@@ -73,6 +73,8 @@ class App {
   });
 
   private genSettings: GenerationSettings = loadGenerationSettings();
+  /** Milliseconds for the go-to / recenter camera glide (0 = instant). */
+  private gotoMs: number = this.genSettings.transitionMs ?? 350;
   /** Session-only history of rendered images per locus, so rerolls aren't lost. */
   private readonly sessionImages = new Map<string, string[]>();
 
@@ -125,7 +127,7 @@ class App {
       startReview: () => this.beginReview(),
       openSettings: () => this.settingsDialog.open(this.genConfig()),
       openLog: () => this.toasts.openLog(),
-      recenter: () => this.viewer.recenter(),
+      recenter: () => this.recenterView(),
       selectLocus: (id) => this.select(id),
       // rerender=false: re-rendering the panel on every keystroke would drop input
       // focus. The panel updates the affected row text in place instead. History is
@@ -178,6 +180,19 @@ class App {
       { id: 'marker', label: 'Marker size', min: 0.3, max: 3, step: 0.1, value: 1, onChange: (v) => { this.loci.setMarkerScale(v); this.loci.sync(this.palace); } },
       { id: 'glow', label: 'Mesh glow', min: 0, max: 1, step: 0.05, value: 0.45, onChange: (v) => this.loci.setMeshEmissive(v) },
       { id: 'fade', label: 'Fade ms', min: 0, max: 600, step: 20, value: this.fadeMs, onChange: (v) => (this.fadeMs = v) },
+      {
+        id: 'goto',
+        label: 'Go-to ms',
+        min: 0,
+        max: 1500,
+        step: 50,
+        value: this.gotoMs,
+        onChange: (v) => {
+          this.gotoMs = v;
+          this.genSettings = { ...this.genSettings, transitionMs: v };
+          saveGenerationSettings(this.genSettings);
+        },
+      },
     ]);
 
     this.viewer.start();
@@ -421,6 +436,13 @@ class App {
     this.viewer.camera.position.addScaledVector(this.scratchA, step);
   }
 
+  /** Keyboard dolly (}/{) — step the camera forward/back along the view direction. */
+  private dolly(dir: 1 | -1): void {
+    this.viewer.camera.getWorldDirection(this.scratchA);
+    const step = dir * 0.7 * Math.max(0.3, this.viewer.fp.eyeOffset / 1.7);
+    this.viewer.camera.position.addScaledVector(this.scratchA, step);
+  }
+
   /** Select the marker under the crosshair and drop back to the editor for it. */
   private openTargetedInEditor(): void {
     if (!this.targetedId) return;
@@ -591,12 +613,20 @@ class App {
       this.selectAdjacent(e.key === ']' ? 1 : -1);
       return;
     }
+    // { / } dolly the camera out / in — a keyboard zoom to frame a locus after
+    // flying to it (mirrors the mouse wheel, works whether or not the pointer is
+    // locked). Shift+[ = '{', Shift+] = '}'.
+    if (!typing && (e.key === '{' || e.key === '}')) {
+      e.preventDefault();
+      this.dolly(e.key === '}' ? 1 : -1);
+      return;
+    }
 
     if (this.mode === 'walk') {
       if (e.code === 'KeyT') this.dropOrPlace();
       else if (e.code === 'KeyB') this.deleteTargeted();
       else if (e.code === 'KeyG') this.toggleMove();
-      else if (e.code === 'KeyR') this.viewer.recenter();
+      else if (e.code === 'KeyR') this.recenterView();
       else if (e.code === 'KeyX') this.toggleXray();
       else if (e.code === 'KeyP') this.placePortal();
       else if (e.code === 'Enter' && this.targetedPortalId) void this.enterPortal(this.targetedPortalId);
@@ -1043,7 +1073,18 @@ class App {
     if (locus) this.gotoLocusObject(locus);
   }
 
-  /** Position the camera a couple of metres off the locus, looking at it. */
+  /** Fly to locus #1 (or the framed model if there are no loci yet). */
+  private recenterView(): void {
+    const first = lociInOrder(this.palace)[0];
+    if (first) {
+      this.gotoLocusObject(first);
+      this.toasts.info(`Centered on #${first.order}${first.label ? ` — ${first.label}` : ''}`);
+    } else {
+      this.viewer.recenter();
+    }
+  }
+
+  /** Glide to a spot off the locus, looking at it. Stand back further for big objects. */
   private gotoLocusObject(locus: Locus): void {
     const pos = this.loci.worldPosition(locus, this.scratchA);
     const normal = this.loci.worldNormal(locus, this.scratchB);
@@ -1052,10 +1093,12 @@ class App {
     const horiz = new THREE.Vector3(normal.x, 0, normal.z);
     if (horiz.lengthSq() < 0.02) horiz.set(0, 0, 1);
     horiz.normalize();
-    const viewPos = pos.clone().addScaledVector(horiz, 2.2);
-    viewPos.y = pos.y + 0.8;
+    // Scale the standoff with the object so a 3–4× mesh doesn't swallow the camera.
+    const s = Math.max(1, locus.object_scale ?? 1);
+    const viewPos = pos.clone().addScaledVector(horiz, 2.2 * s);
+    viewPos.y = pos.y + 0.8 * s;
     this.viewer.fp.setFlying(true); // float at the target, don't drop
-    this.viewer.teleportTo(viewPos, pos);
+    this.viewer.flyTo(viewPos, pos, this.gotoMs);
   }
 
   // --- Portals (nested worlds) -----------------------------------------------
@@ -1210,7 +1253,7 @@ class App {
     const viewPos = pos.clone().addScaledVector(horiz, 2.2);
     viewPos.y = pos.y + 0.8;
     this.viewer.fp.setFlying(true);
-    this.viewer.teleportTo(viewPos, pos);
+    this.viewer.flyTo(viewPos, pos, this.gotoMs);
   }
 
   /** Tell the panel how deep we are so it can show a Return / breadcrumb bar. */

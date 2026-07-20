@@ -450,6 +450,42 @@ canvas {
   font-size: 12px;
   color: var(--ui-fg);
 }
+/* Docked, non-blocking controls reference (toggled with '?'). Never captures the
+   pointer, so you can keep it up while navigating. */
+.help-panel {
+  position: fixed;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  max-height: 88vh;
+  overflow-y: auto;
+  pointer-events: none;
+  z-index: 40;
+  background: rgba(18, 20, 26, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.help-panel .ctrl-grid {
+  gap: 3px 12px;
+}
+.help-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ui-dim);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.help-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
 .ctrl-grid span:nth-child(odd) {
   color: var(--ui-dim);
 }
