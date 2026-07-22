@@ -36,16 +36,20 @@ import {
   addAttachment,
   addLocus,
   addPortal,
+  addProp,
+  addPropAttachment,
   createEmptyPalace,
   DEFAULT_ASSET_ID,
   DEFAULT_BACKGROUND,
   lociInOrder,
   migratePalace,
   removeLocus,
+  removeProp,
   reorderLocus,
   setAsset,
   type Locus,
   type Palace,
+  type SceneProp,
   type Vec3,
 } from './model/palace';
 
@@ -173,6 +177,16 @@ class App {
       renamePortal: (id, name) => this.renamePortal(id, name),
       gotoPortal: (id) => this.gotoPortal(id),
       returnToParent: () => this.returnToParent(),
+      addProp: (locusId, kind) => this.addProp(locusId, kind),
+      removeProp: (locusId, propId) => this.removeProp(locusId, propId),
+      updatePropText: (locusId, propId, text) => this.updatePropText(locusId, propId, text),
+      updatePropPrompt: (locusId, propId, prompt) => this.updatePropPrompt(locusId, propId, prompt),
+      generateProp: (locusId, propId) => this.generateProp(locusId, propId),
+      attachPropImage: (locusId, propId) => void this.attachProp(locusId, propId, 'image'),
+      attachPropMesh: (locusId, propId) => void this.attachProp(locusId, propId, 'mesh'),
+      setPropOffset: (locusId, propId, axis, v) => this.setPropOffset(locusId, propId, axis, v),
+      setPropScale: (locusId, propId, v) => this.setPropScale(locusId, propId, v),
+      setPropRotation: (locusId, propId, axis, v) => this.setPropRotation(locusId, propId, axis, v),
     });
     this.syncGeneration();
 
@@ -848,38 +862,150 @@ class App {
 
   /** Render the locus's own words to a 2D image via the active backend, verbatim. */
   private generateFor(id: string): void {
-    // Fall back to the offline placeholder if this world has no pipeline chosen,
-    // so Render always does something without forcing a settings change.
-    const backend = getBackend(this.activeBackendId()) ?? getBackend('placeholder');
-    if (!backend) return;
     const locus = this.palace.loci.find((l) => l.id === id);
-    if (!locus || !locus.image_prompt.trim()) return;
-
-    // Seed the dialog's history with this session's variants (or the saved image).
-    let history = this.sessionImages.get(id);
-    if (!history) {
-      history = locus.image_2d ? [locus.image_2d] : [];
-      this.sessionImages.set(id, history);
-    }
-
-    // The style is a rendering modifier appended under the hood; the dialog still
-    // shows the user's own words. Their mnemonic text is never altered.
-    const styledPrompt = applyStyle(locus.image_prompt, this.palace.generation?.style);
-    this.generateDialog.open(locus.image_prompt, {
-      variants: history,
-      generate: (seed) => backend.generateImage(styledPrompt, seed),
-      onGenerated: (dataUrl) => history.push(dataUrl),
+    if (!locus) return;
+    this.openImageGen({
+      prompt: locus.image_prompt,
+      historyKey: id,
+      current: locus.image_2d,
       onApprove: (dataUrl) => {
         // A newly approved image becomes the representation; the old mesh (now stale
         // for this image) stays in the gallery so you can rotate back to it.
         locus.image_2d = dataUrl;
         locus.mesh_3d = null;
         addAttachment(locus, { type: 'image', src: dataUrl });
+      },
+    });
+  }
+
+  /**
+   * Shared Render dialog for anything that holds an image (a locus or a scene
+   * prop). Falls back to the offline placeholder if this world has no pipeline
+   * chosen, so Render always does something. The mnemonic text is never altered.
+   */
+  private openImageGen(opts: { prompt: string; historyKey: string; current: string | null; onApprove: (dataUrl: string) => void }): void {
+    const backend = getBackend(this.activeBackendId()) ?? getBackend('placeholder');
+    if (!backend) return;
+    if (!opts.prompt.trim()) return;
+    let history = this.sessionImages.get(opts.historyKey);
+    if (!history) {
+      history = opts.current ? [opts.current] : [];
+      this.sessionImages.set(opts.historyKey, history);
+    }
+    const styledPrompt = applyStyle(opts.prompt, this.palace.generation?.style);
+    this.generateDialog.open(opts.prompt, {
+      variants: history,
+      generate: (seed) => backend.generateImage(styledPrompt, seed),
+      onGenerated: (dataUrl) => history!.push(dataUrl),
+      onApprove: (dataUrl) => {
+        opts.onApprove(dataUrl);
         this.loci.sync(this.palace);
         this.checkpoint();
         this.renderEditor();
       },
     });
+  }
+
+  // --- Scene props -----------------------------------------------------------
+
+  private findProp(locusId: string, propId: string): { locus: Locus; prop: SceneProp } | null {
+    const locus = this.palace.loci.find((l) => l.id === locusId);
+    const prop = locus?.props?.find((p) => p.id === propId);
+    return locus && prop ? { locus, prop } : null;
+  }
+
+  private addProp(locusId: string, kind: 'text' | 'image' | 'mesh'): void {
+    const locus = this.palace.loci.find((l) => l.id === locusId);
+    if (!locus) return;
+    addProp(locus, kind);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private removeProp(locusId: string, propId: string): void {
+    const locus = this.palace.loci.find((l) => l.id === locusId);
+    if (!locus) return;
+    removeProp(locus, propId);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private updatePropText(locusId: string, propId: string, text: string): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    found.prop.text = text;
+    this.loci.sync(this.palace); // no re-render: keep focus in the field
+    this.checkpointSoon();
+  }
+
+  private updatePropPrompt(locusId: string, propId: string, prompt: string): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    found.prop.image_prompt = prompt;
+    this.checkpointSoon(); // no re-render: keep focus in the field
+  }
+
+  private generateProp(locusId: string, propId: string): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    this.openImageGen({
+      prompt: found.prop.image_prompt ?? '',
+      historyKey: `${locusId}:${propId}`,
+      current: found.prop.src ?? null,
+      onApprove: (dataUrl) => {
+        found.prop.src = dataUrl;
+        addPropAttachment(found.prop, { type: 'image', src: dataUrl });
+      },
+    });
+  }
+
+  private async attachProp(locusId: string, propId: string, kind: 'image' | 'mesh'): Promise<void> {
+    const file = await pickFile(kind === 'image' ? 'image/*' : '.glb,.gltf,model/gltf-binary');
+    if (!file) return;
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      found.prop.src = dataUrl;
+      addPropAttachment(found.prop, { type: kind, src: dataUrl });
+      this.loci.sync(this.palace);
+      this.checkpoint();
+      this.renderEditor();
+      this.toasts.success(kind === 'image' ? 'Image attached to prop' : '3D model attached to prop');
+    } catch (err) {
+      console.error(err);
+      this.toasts.error(`Couldn't attach "${file.name}"`);
+    }
+  }
+
+  private setPropOffset(locusId: string, propId: string, axis: number, value: number): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    const o: Vec3 = found.prop.offset ?? [0, 0, 0];
+    o[axis] = value;
+    found.prop.offset = o;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private setPropScale(locusId: string, propId: string, value: number): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    found.prop.scale = value;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private setPropRotation(locusId: string, propId: string, axis: number, value: number): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    const r: Vec3 = found.prop.rotation ?? [0, 0, 0];
+    r[axis] = value;
+    found.prop.rotation = r;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
   }
 
   private clearImage(id: string): void {

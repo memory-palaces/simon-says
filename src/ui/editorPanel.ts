@@ -1,4 +1,4 @@
-import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace } from '../model/palace';
+import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace, type SceneProp } from '../model/palace';
 import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
 
 interface GenState {
@@ -53,6 +53,17 @@ export interface EditorHandlers {
   renamePortal(id: string, name: string): void;
   gotoPortal(id: string): void;
   returnToParent(): void;
+  // Scene props (extra elements composed around a locus).
+  addProp(locusId: string, kind: 'text' | 'image' | 'mesh'): void;
+  removeProp(locusId: string, propId: string): void;
+  updatePropText(locusId: string, propId: string, text: string): void;
+  updatePropPrompt(locusId: string, propId: string, prompt: string): void;
+  generateProp(locusId: string, propId: string): void;
+  attachPropImage(locusId: string, propId: string): void;
+  attachPropMesh(locusId: string, propId: string): void;
+  setPropOffset(locusId: string, propId: string, axis: number, value: number): void;
+  setPropScale(locusId: string, propId: string, value: number): void;
+  setPropRotation(locusId: string, propId: string, axis: number, value: number): void;
 }
 
 /**
@@ -420,7 +431,126 @@ export class EditorPanel {
       });
     }
 
+    // Scene: extra props composed around this locus for a richer tableau.
+    wrap.appendChild(this.sceneSection(locus));
+
     return wrap;
+  }
+
+  /** The "Scene" section: add/manage extra props (text, image, 3D) around a locus. */
+  private sceneSection(locus: Locus): HTMLElement {
+    const wrap = div('scene-section');
+    const head = div('scene-head');
+    const title = document.createElement('span');
+    title.className = 'scene-title';
+    const count = locus.props?.length ?? 0;
+    title.textContent = `Scene${count ? ` (${count})` : ''}`;
+    head.appendChild(title);
+    wrap.appendChild(head);
+
+    const hint = div('scene-hint');
+    hint.textContent = 'Build a richer tableau: add captions, extra billboards, or 3D props around this spot.';
+    wrap.appendChild(hint);
+
+    for (const prop of locus.props ?? []) {
+      wrap.appendChild(this.propCard(locus, prop));
+    }
+
+    const addRow = div('locus-gen-row');
+    addRow.appendChild(button('+ Text', '', () => this.handlers.addProp(locus.id, 'text')));
+    addRow.appendChild(button('+ Image', '', () => this.handlers.addProp(locus.id, 'image')));
+    addRow.appendChild(button('+ 3D', '', () => this.handlers.addProp(locus.id, 'mesh')));
+    wrap.appendChild(addRow);
+    return wrap;
+  }
+
+  private propCard(locus: Locus, prop: SceneProp): HTMLElement {
+    const card = div('prop-card');
+    const head = div('prop-head');
+    const badge = document.createElement('span');
+    badge.className = 'prop-badge prop-' + prop.kind;
+    badge.textContent = prop.kind === 'text' ? 'Text' : prop.kind === 'image' ? 'Image' : '3D';
+    head.appendChild(badge);
+    head.appendChild(iconButton('✕', 'Remove this prop', () => this.handlers.removeProp(locus.id, prop.id)));
+    card.appendChild(head);
+
+    if (prop.kind === 'text') {
+      const f = field('Caption', 'floating text, e.g. "TOP OF THE STAIRS"');
+      const input = f.input as HTMLInputElement;
+      input.value = prop.text ?? '';
+      input.oninput = () => this.handlers.updatePropText(locus.id, prop.id, input.value);
+      card.appendChild(f.el);
+    } else {
+      const f = field('Image prompt (rendered by the AI)', 'e.g. "a brass diving helmet, dented"', true);
+      const input = f.input as HTMLTextAreaElement;
+      input.value = prop.image_prompt ?? '';
+      input.oninput = () => this.handlers.updatePropPrompt(locus.id, prop.id, input.value);
+      card.appendChild(f.el);
+
+      const row = div('locus-gen-row');
+      if (prop.kind === 'image') {
+        row.appendChild(button('✨ Render', 'primary', () => this.handlers.generateProp(locus.id, prop.id)));
+        row.appendChild(button('📎 Attach image', '', () => this.handlers.attachPropImage(locus.id, prop.id)));
+      } else {
+        row.appendChild(button('📎 Attach 3D', '', () => this.handlers.attachPropMesh(locus.id, prop.id)));
+      }
+      card.appendChild(row);
+
+      if (prop.kind === 'image' && prop.src) {
+        const thumb = document.createElement('img');
+        thumb.className = 'prop-thumb';
+        thumb.src = prop.src;
+        card.appendChild(thumb);
+      } else if (prop.kind === 'mesh' && prop.src) {
+        const holder = div('prop-mesh-preview');
+        this.handlers.mountMeshPreview(holder, prop.src);
+        card.appendChild(holder);
+      }
+    }
+
+    // Placement: offset (left/right, up/down, in/out), scale, and rotation (mesh).
+    const off = prop.offset ?? [0, 0, 0];
+    (['Left · right', 'Down · up', 'In · out'] as const).forEach((label, axis) => {
+      card.appendChild(
+        sliderRow({
+          label,
+          min: -4,
+          max: 4,
+          step: 0.1,
+          value: off[axis],
+          def: 0,
+          onChange: (v) => this.handlers.setPropOffset(locus.id, prop.id, axis, v),
+        }),
+      );
+    });
+    card.appendChild(
+      sliderRow({
+        label: 'Scale',
+        min: 0.2,
+        max: 5,
+        step: 0.1,
+        value: prop.scale ?? 1,
+        def: 1,
+        onChange: (v) => this.handlers.setPropScale(locus.id, prop.id, v),
+      }),
+    );
+    if (prop.kind === 'mesh') {
+      const rot = prop.rotation ?? [0, 0, 0];
+      ['Rotate X', 'Rotate Y', 'Rotate Z'].forEach((label, axis) => {
+        card.appendChild(
+          sliderRow({
+            label,
+            min: -180,
+            max: 180,
+            step: 5,
+            value: rot[axis],
+            def: 0,
+            onChange: (v) => this.handlers.setPropRotation(locus.id, prop.id, axis, v),
+          }),
+        );
+      });
+    }
+    return card;
   }
 
   /** Generate / regenerate / clear the rendered image for one locus. */

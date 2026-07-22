@@ -1,9 +1,21 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { Locus, Palace, Portal, Vec3 } from '../model/palace';
+import type { Locus, Palace, Portal, SceneProp, Vec3 } from '../model/palace';
 
 const meshLoader = new GLTFLoader();
 const PORTAL_AXIS = new THREE.Vector3(0, 0, 1); // torus's local axis, aligned to the surface normal
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
+/** One rendered scene prop (a text/image billboard sprite, or a 3D mesh group). */
+interface PropObj {
+  kind: SceneProp['kind'];
+  object: THREE.Object3D; // Sprite (text/image) or Group (mesh)
+  src?: string;
+  text?: string;
+  aspect?: number; // width/height of a text plaque, for non-square scaling
+  meshRawCenter?: THREE.Vector3;
+  meshMaxDim?: number;
+}
 
 /** Look up the live scene object for an asset id (its current world transform). */
 export type ResolveAsset = (assetId: string) => THREE.Object3D | null;
@@ -41,6 +53,8 @@ interface Marker {
   /** Loaded mesh's box centre + max dimension, for scaling/positioning. */
   meshRawCenter?: THREE.Vector3;
   meshMaxDim?: number;
+  /** Extra scene props composed around this locus, keyed by prop id. */
+  props: Map<string, PropObj>;
 }
 
 /**
@@ -68,6 +82,7 @@ export class LociLayer {
   private readonly v = new THREE.Vector3();
   private readonly n = new THREE.Vector3();
   private readonly inv = new THREE.Matrix4();
+  private readonly tmpRight = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, resolve: ResolveAsset) {
     this.group.name = 'loci';
@@ -102,11 +117,13 @@ export class LociLayer {
       this.updateImage(marker, locus.image_2d);
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
+      this.syncProps(marker, locus);
       this.applyXray(marker);
     }
     // Drop markers whose loci are gone.
     for (const [id, marker] of this.markers) {
       if (!live.has(id)) {
+        for (const po of marker.props.values()) disposePropObject(po);
         this.group.remove(marker.group);
         this.markers.delete(id);
       }
@@ -203,6 +220,132 @@ export class LociLayer {
       marker.mesh3d.position.copy(marker.meshRawCenter).multiplyScalar(-scale).addScaledVector(marker.normal, half + 0.15);
       marker.mesh3d.position.y += 0.3 * os;
     }
+  }
+
+  /**
+   * Reconcile a locus's scene props with their rendered objects. Each prop sits at
+   * an offset in the locus's local frame — [right, worldUp, out(normal)] — so
+   * left/right slides along the wall, up/down is vertical, in/out is depth.
+   */
+  private syncProps(marker: Marker, locus: Locus): void {
+    const live = new Set<string>();
+    // Tangent basis: a horizontal "right" perpendicular to the normal, plus world up.
+    const out = marker.normal;
+    const right = this.tmpRight.copy(WORLD_UP).cross(out);
+    if (right.lengthSq() < 1e-4) right.set(1, 0, 0);
+    right.normalize();
+
+    for (const p of locus.props ?? []) {
+      live.add(p.id);
+      let po = marker.props.get(p.id);
+      if (!po || po.kind !== p.kind) {
+        if (po) {
+          marker.group.remove(po.object);
+          disposePropObject(po);
+        }
+        po = buildProp(p.kind);
+        marker.props.set(p.id, po);
+        marker.group.add(po.object);
+      }
+      if (p.kind === 'text') this.updatePropText(po, p.text ?? '');
+      else if (p.kind === 'image') this.updatePropImage(po, p.src ?? null);
+      else void this.updatePropMesh(po, p);
+
+      const o = p.offset ?? [0, 0, 0];
+      po.object.position
+        .copy(right)
+        .multiplyScalar(o[0])
+        .addScaledVector(WORLD_UP, o[1])
+        .addScaledVector(out, o[2]);
+      this.scaleProp(po, p);
+    }
+    for (const [id, po] of marker.props) {
+      if (!live.has(id)) {
+        marker.group.remove(po.object);
+        disposePropObject(po);
+        marker.props.delete(id);
+      }
+    }
+  }
+
+  private scaleProp(po: PropObj, p: SceneProp): void {
+    const s = p.scale ?? 1;
+    if (po.kind === 'image') {
+      (po.object as THREE.Sprite).scale.setScalar(0.9 * s);
+    } else if (po.kind === 'text') {
+      const a = po.aspect ?? 3;
+      (po.object as THREE.Sprite).scale.set(0.42 * a * s, 0.42 * s, 1);
+    } else if (po.kind === 'mesh') {
+      if (po.meshMaxDim) po.object.scale.setScalar((0.8 / po.meshMaxDim) * s);
+      const r = p.rotation ?? [0, 0, 0];
+      po.object.rotation.set(deg2rad(r[0]), deg2rad(r[1]), deg2rad(r[2]));
+    }
+  }
+
+  private updatePropText(po: PropObj, text: string): void {
+    if (po.text === text) return;
+    po.text = text;
+    const spr = po.object as THREE.Sprite;
+    const mat = spr.material as THREE.SpriteMaterial;
+    mat.map?.dispose();
+    const { tex, aspect } = textTexture(text || '…');
+    mat.map = tex;
+    mat.needsUpdate = true;
+    po.aspect = aspect;
+  }
+
+  private updatePropImage(po: PropObj, src: string | null): void {
+    const spr = po.object as THREE.Sprite;
+    if (src) {
+      if (po.src !== src) {
+        po.src = src;
+        const tex = new THREE.TextureLoader().load(src);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const mat = spr.material as THREE.SpriteMaterial;
+        mat.map?.dispose();
+        mat.map = tex;
+        mat.needsUpdate = true;
+      }
+      spr.visible = true;
+    } else {
+      spr.visible = false;
+      po.src = undefined;
+    }
+  }
+
+  private async updatePropMesh(po: PropObj, p: SceneProp): Promise<void> {
+    const src = p.src ?? null;
+    if ((src ?? undefined) === po.src) return;
+    po.src = src ?? undefined;
+    for (const c of [...po.object.children]) {
+      po.object.remove(c);
+      disposeSubtree(c);
+    }
+    po.meshRawCenter = undefined;
+    po.meshMaxDim = undefined;
+    if (!src) return;
+
+    const gltf = await meshLoader.loadAsync(src);
+    if (po.src !== src) {
+      disposeSubtree(gltf.scene); // superseded
+      return;
+    }
+    const obj = gltf.scene;
+    applyEmissive(obj, this.meshEmissive);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    po.meshRawCenter = center.clone();
+    po.meshMaxDim = Math.max(size.x, size.y, size.z) || 1;
+    // Recentre the inner object at the group origin so the group scales about its
+    // centre (the group's own position is the prop offset, unaffected by scale).
+    obj.position.copy(center).multiplyScalar(-1);
+    po.object.add(obj);
+    // Apply scale/rotation now that the mesh's size is known (the load is async, so
+    // syncProps already ran with meshMaxDim unset).
+    this.scaleProp(po, p);
   }
 
   /** Show (or hide) the generated 2D image as a billboard above the marker. */
@@ -468,6 +611,7 @@ export class LociLayer {
       normal: new THREE.Vector3(0, 1, 0),
       objectScale: 1,
       objectRot: new THREE.Vector3(0, 0, 0),
+      props: new Map(),
     };
     this.markers.set(locusId, marker);
     return marker;
@@ -504,6 +648,73 @@ export class LociLayer {
 
 function deg2rad(d: number): number {
   return (d * Math.PI) / 180;
+}
+
+/** Create the empty render object for a prop (a billboard sprite, or a mesh group). */
+function buildProp(kind: SceneProp['kind']): PropObj {
+  if (kind === 'mesh') return { kind, object: new THREE.Group() };
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, toneMapped: false }));
+  sprite.renderOrder = 10; // draw over walls like the hero image
+  return { kind, object: sprite };
+}
+
+/** A rounded translucent plaque with the caption text; returns its aspect ratio too. */
+function textTexture(text: string): { tex: THREE.Texture; aspect: number } {
+  const fontSize = 64;
+  const pad = 26;
+  const meas = document.createElement('canvas').getContext('2d')!;
+  const font = `bold ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+  meas.font = font;
+  const w = Math.min(1200, Math.max(80, Math.ceil(meas.measureText(text).width) + pad * 2));
+  const h = fontSize + pad * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = 'rgba(12,12,16,0.72)';
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(1, 1, w - 2, h - 2, 18);
+    ctx.fill();
+  } else {
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, h / 2 + 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return { tex, aspect: w / h };
+}
+
+/** Make a loaded mesh partly self-lit from its own texture (see updateMesh3d). */
+function applyEmissive(root: THREE.Object3D, intensity: number): void {
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m instanceof THREE.MeshStandardMaterial) {
+          if (m.map) m.emissiveMap = m.map;
+          m.emissive = new THREE.Color(0xffffff);
+          m.emissiveIntensity = intensity;
+          m.needsUpdate = true;
+        }
+      }
+    }
+  });
+}
+
+/** Free a prop's GPU resources (its sprite texture/material, or its mesh subtree). */
+function disposePropObject(po: PropObj): void {
+  if (po.object instanceof THREE.Sprite) {
+    const mat = po.object.material as THREE.SpriteMaterial;
+    mat.map?.dispose();
+    mat.dispose();
+  } else {
+    disposeSubtree(po.object);
+  }
 }
 
 /** Free GPU memory for a loaded mesh subtree before we drop it. */

@@ -43,6 +43,13 @@ export interface Locus {
   /** Every image/mesh ever generated or attached here — rotate between them. */
   gallery?: Attachment[];
   /**
+   * Extra elements composed around this locus to build a richer "scene" — text
+   * captions, 2D billboards, or 3D props — each with its own offset/scale. They
+   * belong to the locus: they move, hide, and delete with it. Not part of the
+   * recall order (the locus is still the single thing you recall here).
+   */
+  props?: SceneProp[];
+  /**
    * A nested palace embedded inline (self-contained). Entering it is a scene
    * transition — a full-size space can live inside a fridge. Non-Euclidean is fine.
    */
@@ -55,6 +62,57 @@ export interface Locus {
 export interface Attachment {
   type: 'image' | 'mesh';
   src: string;
+}
+
+/**
+ * One element of a locus's scene. A `text` prop is a floating caption; an `image`
+ * prop is a billboard; a `mesh` prop is a 3D object. Offsets are in the locus's
+ * local frame: [right, up, out] in metres (out = along the surface normal).
+ */
+export interface SceneProp {
+  id: string;
+  kind: 'text' | 'image' | 'mesh';
+  /** Caption text (kind 'text'). */
+  text?: string;
+  /** User-written prompt for the image/mesh (kind 'image'|'mesh'). AI only renders it. */
+  image_prompt?: string;
+  /** Image data URL ('image') or GLB data URL ('mesh'). */
+  src?: string | null;
+  offset?: Vec3;
+  scale?: number;
+  /** Mesh rotation in degrees [x,y,z] (billboards/text ignore it). */
+  rotation?: Vec3;
+  /** Version history for this prop's image/mesh — rotate between variants. */
+  gallery?: Attachment[];
+}
+
+/** Add a scene prop of the given kind to a locus, staggered so props don't stack. */
+export function addProp(locus: Locus, kind: SceneProp['kind']): SceneProp {
+  if (!locus.props) locus.props = [];
+  const n = locus.props.length;
+  const side = n % 2 === 0 ? 1 : -1;
+  const prop: SceneProp = {
+    id: uid('sp'),
+    kind,
+    text: kind === 'text' ? '' : undefined,
+    image_prompt: kind === 'text' ? undefined : '',
+    src: null,
+    offset: [0.8 * side * (1 + Math.floor(n / 2) * 0.7), 0.6, 0.5],
+    scale: 1,
+    rotation: kind === 'mesh' ? [0, 0, 0] : undefined,
+  };
+  locus.props.push(prop);
+  return prop;
+}
+
+export function removeProp(locus: Locus, propId: string): void {
+  if (locus.props) locus.props = locus.props.filter((p) => p.id !== propId);
+}
+
+/** Add a variant to a prop's gallery (deduped by src). */
+export function addPropAttachment(prop: SceneProp, att: Attachment): void {
+  if (!prop.gallery) prop.gallery = [];
+  if (!prop.gallery.some((a) => a.type === att.type && a.src === att.src)) prop.gallery.push(att);
 }
 
 /** Add an attachment to a locus's gallery (deduped by src). */
