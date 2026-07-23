@@ -548,6 +548,11 @@ canvas {
   justify-content: space-between;
   margin-bottom: 6px;
 }
+.prop-head-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 .prop-badge {
   font-size: 10px;
   text-transform: uppercase;

@@ -83,6 +83,7 @@ export class LociLayer {
   private readonly n = new THREE.Vector3();
   private readonly inv = new THREE.Matrix4();
   private readonly tmpRight = new THREE.Vector3();
+  private readonly tmpUp = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, resolve: ResolveAsset) {
     this.group.name = 'loci';
@@ -227,13 +228,20 @@ export class LociLayer {
    * an offset in the locus's local frame — [right, worldUp, out(normal)] — so
    * left/right slides along the wall, up/down is vertical, in/out is depth.
    */
-  private syncProps(marker: Marker, locus: Locus): void {
-    const live = new Set<string>();
-    // Tangent basis: a horizontal "right" perpendicular to the normal, plus world up.
-    const out = marker.normal;
-    const right = this.tmpRight.copy(WORLD_UP).cross(out);
+  /** Orthonormal tangent basis at a surface: right (horizontal), up, out(=normal). */
+  private basisFromNormal(n: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): void {
+    right.copy(WORLD_UP).cross(n);
     if (right.lengthSq() < 1e-4) right.set(1, 0, 0);
     right.normalize();
+    up.crossVectors(n, right).normalize();
+  }
+
+  private syncProps(marker: Marker, locus: Locus): void {
+    const live = new Set<string>();
+    const out = marker.normal;
+    const right = this.tmpRight;
+    const up = this.tmpUp;
+    this.basisFromNormal(out, right, up);
 
     for (const p of locus.props ?? []) {
       live.add(p.id);
@@ -252,11 +260,7 @@ export class LociLayer {
       else void this.updatePropMesh(po, p);
 
       const o = p.offset ?? [0, 0, 0];
-      po.object.position
-        .copy(right)
-        .multiplyScalar(o[0])
-        .addScaledVector(WORLD_UP, o[1])
-        .addScaledVector(out, o[2]);
+      po.object.position.copy(right).multiplyScalar(o[0]).addScaledVector(up, o[1]).addScaledVector(out, o[2]);
       this.scaleProp(po, p);
     }
     for (const [id, po] of marker.props) {
@@ -543,6 +547,20 @@ export class LociLayer {
     root.updateWorldMatrix(true, false);
     out.set(locus.local_position[0], locus.local_position[1], locus.local_position[2]);
     return out.applyMatrix4(root.matrixWorld);
+  }
+
+  /**
+   * Convert a world-space point into a prop offset [right, up, out] in a locus's
+   * local tangent frame — the inverse of how syncProps places props. Used to place
+   * or move a prop by aiming at a surface. Returns null if the marker isn't built.
+   */
+  offsetFromWorld(locusId: string, worldPoint: THREE.Vector3): Vec3 | null {
+    const marker = this.markers.get(locusId);
+    if (!marker) return null;
+    this.basisFromNormal(marker.normal, this.tmpRight, this.tmpUp);
+    // Props are children of marker.group, so measure from the group's world origin.
+    const delta = this.v.copy(worldPoint).sub(marker.group.position);
+    return [delta.dot(this.tmpRight), delta.dot(this.tmpUp), delta.dot(marker.normal)];
   }
 
   /** World-space surface normal of a locus. */

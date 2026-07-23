@@ -93,6 +93,8 @@ class App {
   private selectedId: string | null = null;
   private targetedId: string | null = null;
   private movingId: string | null = null;
+  /** A scene prop being placed/moved in-world by aiming at a surface. */
+  private placingProp: { locusId: string; propId: string; savedOffset: Vec3 } | null = null;
 
   // Review flow state.
   private reviewRoute: Locus[] = [];
@@ -187,6 +189,8 @@ class App {
       setPropOffset: (locusId, propId, axis, v) => this.setPropOffset(locusId, propId, axis, v),
       setPropScale: (locusId, propId, v) => this.setPropScale(locusId, propId, v),
       setPropRotation: (locusId, propId, axis, v) => this.setPropRotation(locusId, propId, axis, v),
+      placeProp: (locusId, propId) => this.placeProp(locusId, propId),
+      makeProp3d: (locusId, propId) => this.makeProp3d(locusId, propId),
     });
     this.syncGeneration();
 
@@ -471,6 +475,7 @@ class App {
   private wireEvents(): void {
     this.viewer.fp.controls.addEventListener('lock', () => this.setMode('walk'));
     this.viewer.fp.controls.addEventListener('unlock', () => {
+      if (this.placingProp) this.cancelPropPlacement(); // Esc/right-click aborts a prop placement
       if (this.mode === 'walk') this.setMode('edit');
     });
 
@@ -479,6 +484,7 @@ class App {
     // looking at — a doorway pin enters its inner palace, otherwise open its editor.
     canvas.addEventListener('click', () => {
       if (this.mode === 'edit') this.enterWalk();
+      else if (this.placingProp) this.finishPropPlacement();
       else if (this.mode === 'walk' && !this.movingId && (this.targetedId || this.targetedPortalId)) this.clickTargeted();
     });
     // Right-click releases the mouse (like Esc), so you don't have to reach for it.
@@ -510,7 +516,16 @@ class App {
     this.loci.update(); // pulse portal rings (all modes)
     if (this.mode === 'walk') {
       const hit = this.viewer.raycastSurface();
-      if (this.movingId && hit) {
+      if (this.placingProp && hit) {
+        // Grabbed prop follows the crosshair, offset relative to its parent locus.
+        const found = this.findProp(this.placingProp.locusId, this.placingProp.propId);
+        const offset = this.loci.offsetFromWorld(this.placingProp.locusId, hit.point);
+        if (found && offset) {
+          offset[2] += 0.3; // sit just off the surface so it doesn't clip into the wall
+          found.prop.offset = offset;
+          this.loci.sync(this.palace);
+        }
+      } else if (this.movingId && hit) {
         // Grabbed locus follows the crosshair across the surface.
         const local = this.loci.worldToLocal(DEFAULT_ASSET_ID, hit.point, hit.normal);
         this.mutateLocus(this.movingId, (l) => {
@@ -564,7 +579,8 @@ class App {
   private updateWalkHud(): void {
     const n = this.palace.loci.length;
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
-    if (this.movingId) parts.push('moving — [T] drop');
+    if (this.placingProp) parts.push('placing prop — click to drop · Esc cancels');
+    else if (this.movingId) parts.push('moving — [T] drop');
     else if (this.targetedPortalId) parts.push('portal — [Enter] go through');
     else if (this.targetedId) {
       const t = this.palace.loci.find((l) => l.id === this.targetedId);
@@ -1008,6 +1024,46 @@ class App {
     this.checkpointSoon();
   }
 
+  /** Arm in-world placement: aim at a surface and click to drop the prop there. */
+  private placeProp(locusId: string, propId: string): void {
+    const found = this.findProp(locusId, propId);
+    if (!found) return;
+    this.selectedId = locusId;
+    this.loci.setSelected(locusId);
+    this.placingProp = { locusId, propId, savedOffset: [...(found.prop.offset ?? [0, 0, 0])] as Vec3 };
+    this.viewer.fp.setFlying(true);
+    this.enterWalk(); // locks the pointer so you can aim
+    this.toasts.info('Placing prop — aim at a surface and click to drop. Esc cancels.');
+  }
+
+  private finishPropPlacement(): void {
+    if (!this.placingProp) return;
+    this.placingProp = null;
+    this.checkpoint(); // commit the new offset to history
+    this.toasts.success('Prop placed');
+  }
+
+  private cancelPropPlacement(): void {
+    if (!this.placingProp) return;
+    const found = this.findProp(this.placingProp.locusId, this.placingProp.propId);
+    if (found) found.prop.offset = this.placingProp.savedOffset; // restore where it was
+    this.placingProp = null;
+    this.loci.sync(this.palace);
+  }
+
+  /** Turn an image prop into a 3D prop (image -> mesh), reusing the world pipeline. */
+  private makeProp3d(locusId: string, propId: string): void {
+    const found = this.findProp(locusId, propId);
+    if (!found || !found.prop.src) return;
+    const label = snippet(found.prop.image_prompt || `prop ${found.prop.id}`);
+    void this.imageTo3d(found.prop.src, label, (glb) => {
+      found.prop.kind = 'mesh';
+      found.prop.src = glb;
+      found.prop.rotation = found.prop.rotation ?? [0, 0, 0];
+      addPropAttachment(found.prop, { type: 'mesh', src: glb });
+    });
+  }
+
   private clearImage(id: string): void {
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus) return;
@@ -1019,19 +1075,27 @@ class App {
 
   /** Second stage: turn the approved image into a 3D mesh at the locus. */
   private async generate3dFor(id: string): Promise<void> {
-    const backend = getBackend(this.activeBackendId());
-    if (!backend?.imageTo3d) return;
     const locus = this.palace.loci.find((l) => l.id === id);
     if (!locus?.image_2d) return;
-
-    // Multiple 3D jobs can run at once, so each gets its own floating toast that
-    // resolves in place — no more missing a sidebar notice while scrolled.
     const label = snippet(locus.image_prompt || locus.label || `locus ${locus.order}`);
-    const toast = this.toasts.show(`Rendering 3D — ${label}…`, 'info', { sticky: true });
-    try {
-      const glb = await backend.imageTo3d(locus.image_2d);
+    await this.imageTo3d(locus.image_2d, label, (glb) => {
       locus.mesh_3d = glb;
       addAttachment(locus, { type: 'mesh', src: glb });
+    });
+  }
+
+  /**
+   * Shared image->3D: run the world pipeline's imageTo3d, with a floating toast
+   * that resolves in place (multiple jobs can run at once). No-ops if the pipeline
+   * can't do 3D. `onGlb` applies the result to whatever holds it (locus or prop).
+   */
+  private async imageTo3d(image: string, label: string, onGlb: (glb: string) => void): Promise<void> {
+    const backend = getBackend(this.activeBackendId());
+    if (!backend?.imageTo3d) return;
+    const toast = this.toasts.show(`Rendering 3D — ${label}…`, 'info', { sticky: true });
+    try {
+      const glb = await backend.imageTo3d(image);
+      onGlb(glb);
       this.loci.sync(this.palace);
       this.checkpoint();
       this.renderEditor();

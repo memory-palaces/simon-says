@@ -64,6 +64,8 @@ export interface EditorHandlers {
   setPropOffset(locusId: string, propId: string, axis: number, value: number): void;
   setPropScale(locusId: string, propId: string, value: number): void;
   setPropRotation(locusId: string, propId: string, axis: number, value: number): void;
+  placeProp(locusId: string, propId: string): void;
+  makeProp3d(locusId: string, propId: string): void;
 }
 
 /**
@@ -449,7 +451,7 @@ export class EditorPanel {
     wrap.appendChild(head);
 
     const hint = div('scene-hint');
-    hint.textContent = 'Build a richer tableau: add captions, extra billboards, or 3D props around this spot.';
+    hint.textContent = 'Build a richer tableau: add captions, billboards, or 3D props. Use 📍 to place one in the world (aim & click), or the sliders below.';
     wrap.appendChild(hint);
 
     for (const prop of locus.props ?? []) {
@@ -471,7 +473,10 @@ export class EditorPanel {
     badge.className = 'prop-badge prop-' + prop.kind;
     badge.textContent = prop.kind === 'text' ? 'Text' : prop.kind === 'image' ? 'Image' : '3D';
     head.appendChild(badge);
-    head.appendChild(iconButton('✕', 'Remove this prop', () => this.handlers.removeProp(locus.id, prop.id)));
+    const headBtns = div('prop-head-btns');
+    headBtns.appendChild(iconButton('📍', 'Place in the world — aim at a surface and click', () => this.handlers.placeProp(locus.id, prop.id)));
+    headBtns.appendChild(iconButton('✕', 'Remove this prop', () => this.handlers.removeProp(locus.id, prop.id)));
+    head.appendChild(headBtns);
     card.appendChild(head);
 
     if (prop.kind === 'text') {
@@ -501,6 +506,12 @@ export class EditorPanel {
         thumb.className = 'prop-thumb';
         thumb.src = prop.src;
         card.appendChild(thumb);
+        // Upgrade the billboard to a real 3D object (gated on 2D + a can-3D pipeline).
+        if (this.gen.can3d) {
+          const row3d = div('locus-gen-row');
+          row3d.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeProp3d(locus.id, prop.id)));
+          card.appendChild(row3d);
+        }
       } else if (prop.kind === 'mesh' && prop.src) {
         const holder = div('prop-mesh-preview');
         this.handlers.mountMeshPreview(holder, prop.src);
