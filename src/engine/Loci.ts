@@ -67,6 +67,7 @@ export class LociLayer {
   private readonly group = new THREE.Group();
   private readonly markers = new Map<string, Marker>();
   private readonly portalMarkers = new Map<string, { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh }>();
+  private readonly decorMarkers = new Map<string, { group: THREE.Group; po: PropObj; normal: THREE.Vector3 }>();
   private readonly resolve: ResolveAsset;
   private readonly labelTextures = new Map<number, THREE.Texture>();
 
@@ -131,6 +132,56 @@ export class LociLayer {
     }
     this.refreshStates();
     this.syncPortals(palace);
+    this.syncDecor(palace);
+  }
+
+  /** Render free-standing decor: a prop anchored in asset-local space, no locus. */
+  private syncDecor(palace: Palace): void {
+    const live = new Set<string>();
+    for (const d of palace.decor ?? []) {
+      live.add(d.id);
+      const root = this.resolve(d.asset_id);
+      if (!root) continue;
+      root.updateWorldMatrix(true, false);
+
+      let dm = this.decorMarkers.get(d.id);
+      if (!dm || dm.po.kind !== d.kind) {
+        if (dm) {
+          this.group.remove(dm.group);
+          disposePropObject(dm.po);
+        }
+        const group = new THREE.Group();
+        const po = buildProp(d.kind);
+        group.add(po.object);
+        this.group.add(group);
+        dm = { group, po, normal: new THREE.Vector3() };
+        this.decorMarkers.set(d.id, dm);
+      }
+
+      this.v.set(d.local_position[0], d.local_position[1], d.local_position[2]).applyMatrix4(root.matrixWorld);
+      this.n.set(d.local_normal[0], d.local_normal[1], d.local_normal[2]).transformDirection(root.matrixWorld).normalize();
+      dm.group.position.copy(this.v);
+      dm.normal.copy(this.n);
+
+      // Reuse the prop content/scale machinery via a zero-offset pseudo-prop.
+      const pseudo: SceneProp = { id: d.id, kind: d.kind, text: d.text, image_prompt: d.image_prompt, src: d.src, scale: d.scale, rotation: d.rotation };
+      if (d.kind === 'text') this.updatePropText(dm.po, d.text ?? '');
+      else if (d.kind === 'image') this.updatePropImage(dm.po, d.src ?? null);
+      else void this.updatePropMesh(dm.po, pseudo);
+      this.scaleProp(dm.po, pseudo);
+
+      // Sit it just off the surface (meshes push out by ~half their footprint).
+      const s = d.scale ?? 1;
+      const push = d.kind === 'mesh' ? 0.4 * s + 0.15 : 0.4;
+      dm.po.object.position.copy(this.n).multiplyScalar(push);
+    }
+    for (const [id, dm] of this.decorMarkers) {
+      if (!live.has(id)) {
+        this.group.remove(dm.group);
+        disposePropObject(dm.po);
+        this.decorMarkers.delete(id);
+      }
+    }
   }
 
   /** Render a pulsing ring for each first-class portal (position/orient like loci). */

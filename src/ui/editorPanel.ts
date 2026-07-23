@@ -1,4 +1,4 @@
-import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Locus, type Palace, type SceneProp } from '../model/palace';
+import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Decor, type Locus, type Palace, type SceneProp } from '../model/palace';
 import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
 
 interface GenState {
@@ -66,6 +66,18 @@ export interface EditorHandlers {
   setPropRotation(locusId: string, propId: string, axis: number, value: number): void;
   placeProp(locusId: string, propId: string): void;
   makeProp3d(locusId: string, propId: string): void;
+  // Free-standing decor (ambiance not tied to a locus).
+  addDecor(kind: 'text' | 'image' | 'mesh'): void;
+  removeDecor(id: string): void;
+  updateDecorText(id: string, text: string): void;
+  updateDecorPrompt(id: string, prompt: string): void;
+  generateDecor(id: string): void;
+  attachDecorImage(id: string): void;
+  attachDecorMesh(id: string): void;
+  setDecorScale(id: string, value: number): void;
+  setDecorRotation(id: string, axis: number, value: number): void;
+  placeDecor(id: string): void;
+  makeDecor3d(id: string): void;
 }
 
 /**
@@ -263,9 +275,119 @@ export class EditorPanel {
     // --- Portals to other worlds -----------------------------------------------
     this.root.appendChild(this.portalsSection(palace));
 
+    // --- Free-standing decor (ambiance not tied to any locus) ------------------
+    this.root.appendChild(this.decorSection(palace));
+
     // --- This world: image pipeline + background -------------------------------
     this.root.appendChild(this.generationSection());
     this.root.appendChild(this.worldSection(palace));
+  }
+
+  /** Manage free-standing decor: elements placed for ambiance, no locus attached. */
+  private decorSection(palace: Palace): HTMLElement {
+    const wrap = div('scene-section');
+    const head = div('scene-head');
+    const title = document.createElement('span');
+    title.className = 'scene-title';
+    const count = palace.decor?.length ?? 0;
+    title.textContent = `Decor${count ? ` (${count})` : ''}`;
+    head.appendChild(title);
+    wrap.appendChild(head);
+
+    const hint = div('scene-hint');
+    hint.textContent = 'Set-dressing placed anywhere, not part of the recall route. Add one, then 📍 to place it in the world.';
+    wrap.appendChild(hint);
+
+    for (const d of palace.decor ?? []) wrap.appendChild(this.decorCard(d));
+
+    const addRow = div('locus-gen-row');
+    addRow.appendChild(button('+ Text', '', () => this.handlers.addDecor('text')));
+    addRow.appendChild(button('+ Image', '', () => this.handlers.addDecor('image')));
+    addRow.appendChild(button('+ 3D', '', () => this.handlers.addDecor('mesh')));
+    wrap.appendChild(addRow);
+    return wrap;
+  }
+
+  private decorCard(d: Decor): HTMLElement {
+    const card = div('prop-card');
+    const head = div('prop-head');
+    const badge = document.createElement('span');
+    badge.className = 'prop-badge prop-' + d.kind;
+    badge.textContent = d.kind === 'text' ? 'Text' : d.kind === 'image' ? 'Image' : '3D';
+    head.appendChild(badge);
+    const headBtns = div('prop-head-btns');
+    headBtns.appendChild(iconButton('📍', 'Place in the world — aim at a surface and click', () => this.handlers.placeDecor(d.id)));
+    headBtns.appendChild(iconButton('✕', 'Remove this decor', () => this.handlers.removeDecor(d.id)));
+    head.appendChild(headBtns);
+    card.appendChild(head);
+
+    if (d.kind === 'text') {
+      const f = field('Caption', 'floating text, e.g. "MIND THE GAP"');
+      const input = f.input as HTMLInputElement;
+      input.value = d.text ?? '';
+      input.oninput = () => this.handlers.updateDecorText(d.id, input.value);
+      card.appendChild(f.el);
+    } else {
+      const f = field('Image prompt (rendered by the AI)', 'e.g. "a tattered ship\'s pennant"', true);
+      const input = f.input as HTMLTextAreaElement;
+      input.value = d.image_prompt ?? '';
+      input.oninput = () => this.handlers.updateDecorPrompt(d.id, input.value);
+      card.appendChild(f.el);
+
+      const row = div('locus-gen-row');
+      if (d.kind === 'image') {
+        row.appendChild(button('✨ Render', 'primary', () => this.handlers.generateDecor(d.id)));
+        row.appendChild(button('📎 Attach image', '', () => this.handlers.attachDecorImage(d.id)));
+      } else {
+        row.appendChild(button('📎 Attach 3D', '', () => this.handlers.attachDecorMesh(d.id)));
+      }
+      card.appendChild(row);
+
+      if (d.kind === 'image' && d.src) {
+        const thumb = document.createElement('img');
+        thumb.className = 'prop-thumb';
+        thumb.src = d.src;
+        card.appendChild(thumb);
+        if (this.gen.can3d) {
+          const row3d = div('locus-gen-row');
+          row3d.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeDecor3d(d.id)));
+          card.appendChild(row3d);
+        }
+      } else if (d.kind === 'mesh' && d.src) {
+        const holder = div('prop-mesh-preview');
+        this.handlers.mountMeshPreview(holder, d.src);
+        card.appendChild(holder);
+      }
+    }
+
+    card.appendChild(
+      sliderRow({
+        label: 'Scale',
+        min: 0.2,
+        max: 5,
+        step: 0.1,
+        value: d.scale ?? 1,
+        def: 1,
+        onChange: (v) => this.handlers.setDecorScale(d.id, v),
+      }),
+    );
+    if (d.kind === 'mesh') {
+      const rot = d.rotation ?? [0, 0, 0];
+      ['Rotate X', 'Rotate Y', 'Rotate Z'].forEach((label, axis) => {
+        card.appendChild(
+          sliderRow({
+            label,
+            min: -180,
+            max: 180,
+            step: 5,
+            value: rot[axis],
+            def: 0,
+            onChange: (v) => this.handlers.setDecorRotation(d.id, axis, v),
+          }),
+        );
+      });
+    }
+    return card;
   }
 
   /** Background colour picker + preset swatches; changes apply live and are undoable. */

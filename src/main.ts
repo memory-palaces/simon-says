@@ -36,6 +36,7 @@ import {
   addAttachment,
   addLocus,
   addPortal,
+  addDecor,
   addProp,
   addPropAttachment,
   createEmptyPalace,
@@ -43,10 +44,12 @@ import {
   DEFAULT_BACKGROUND,
   lociInOrder,
   migratePalace,
+  removeDecor,
   removeLocus,
   removeProp,
   reorderLocus,
   setAsset,
+  type Decor,
   type Locus,
   type Palace,
   type SceneProp,
@@ -95,6 +98,8 @@ class App {
   private movingId: string | null = null;
   /** A scene prop being placed/moved in-world by aiming at a surface. */
   private placingProp: { locusId: string; propId: string; savedOffset: Vec3 } | null = null;
+  /** A free-standing decor item being placed/moved in-world by aiming. */
+  private placingDecor: { decorId: string; saved: { position: Vec3; normal: Vec3 } } | null = null;
 
   // Review flow state.
   private reviewRoute: Locus[] = [];
@@ -191,6 +196,17 @@ class App {
       setPropRotation: (locusId, propId, axis, v) => this.setPropRotation(locusId, propId, axis, v),
       placeProp: (locusId, propId) => this.placeProp(locusId, propId),
       makeProp3d: (locusId, propId) => this.makeProp3d(locusId, propId),
+      addDecor: (kind) => this.addDecor(kind),
+      removeDecor: (id) => this.deleteDecor(id),
+      updateDecorText: (id, text) => this.updateDecorText(id, text),
+      updateDecorPrompt: (id, prompt) => this.updateDecorPrompt(id, prompt),
+      generateDecor: (id) => this.generateDecor(id),
+      attachDecorImage: (id) => void this.attachDecor(id, 'image'),
+      attachDecorMesh: (id) => void this.attachDecor(id, 'mesh'),
+      setDecorScale: (id, v) => this.setDecorScale(id, v),
+      setDecorRotation: (id, axis, v) => this.setDecorRotation(id, axis, v),
+      placeDecor: (id) => this.placeDecor(id),
+      makeDecor3d: (id) => this.makeDecor3d(id),
     });
     this.syncGeneration();
 
@@ -476,6 +492,7 @@ class App {
     this.viewer.fp.controls.addEventListener('lock', () => this.setMode('walk'));
     this.viewer.fp.controls.addEventListener('unlock', () => {
       if (this.placingProp) this.cancelPropPlacement(); // Esc/right-click aborts a prop placement
+      if (this.placingDecor) this.cancelDecorPlacement();
       if (this.mode === 'walk') this.setMode('edit');
     });
 
@@ -485,6 +502,7 @@ class App {
     canvas.addEventListener('click', () => {
       if (this.mode === 'edit') this.enterWalk();
       else if (this.placingProp) this.finishPropPlacement();
+      else if (this.placingDecor) this.finishDecorPlacement();
       else if (this.mode === 'walk' && !this.movingId && (this.targetedId || this.targetedPortalId)) this.clickTargeted();
     });
     // Right-click releases the mouse (like Esc), so you don't have to reach for it.
@@ -523,6 +541,15 @@ class App {
         if (found && offset) {
           offset[2] += 0.3; // sit just off the surface so it doesn't clip into the wall
           found.prop.offset = offset;
+          this.loci.sync(this.palace);
+        }
+      } else if (this.placingDecor && hit) {
+        // Free-standing decor follows the crosshair, anchored in asset-local space.
+        const d = this.findDecor(this.placingDecor.decorId);
+        if (d) {
+          const local = this.loci.worldToLocal(d.asset_id, hit.point, hit.normal);
+          d.local_position = local.position;
+          d.local_normal = local.normal;
           this.loci.sync(this.palace);
         }
       } else if (this.movingId && hit) {
@@ -579,7 +606,7 @@ class App {
   private updateWalkHud(): void {
     const n = this.palace.loci.length;
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
-    if (this.placingProp) parts.push('placing prop — click to drop · Esc cancels');
+    if (this.placingProp || this.placingDecor) parts.push('placing — click to drop · Esc cancels');
     else if (this.movingId) parts.push('moving — [T] drop');
     else if (this.targetedPortalId) parts.push('portal — [Enter] go through');
     else if (this.targetedId) {
@@ -1061,6 +1088,149 @@ class App {
       found.prop.src = glb;
       found.prop.rotation = found.prop.rotation ?? [0, 0, 0];
       addPropAttachment(found.prop, { type: 'mesh', src: glb });
+    });
+  }
+
+  // --- Free-standing decor ---------------------------------------------------
+
+  private findDecor(id: string): Decor | undefined {
+    return this.palace.decor?.find((d) => d.id === id);
+  }
+
+  private addDecor(kind: 'text' | 'image' | 'mesh'): void {
+    // Seed it where you're looking (or a few metres ahead if nothing's in view),
+    // then let the user refine with 📍.
+    const hit = this.viewer.raycastSurface();
+    let point: THREE.Vector3;
+    let normal: THREE.Vector3;
+    if (hit) {
+      point = hit.point;
+      normal = hit.normal;
+    } else {
+      this.viewer.camera.getWorldDirection(this.scratchA);
+      point = this.viewer.camera.position.clone().addScaledVector(this.scratchA, 3);
+      normal = this.scratchA.clone().multiplyScalar(-1);
+    }
+    const local = this.loci.worldToLocal(DEFAULT_ASSET_ID, point, normal);
+    addDecor(this.palace, kind, local.position, local.normal);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+    this.toasts.info('Decor added — use 📍 to place it in the world.');
+  }
+
+  private deleteDecor(id: string): void {
+    removeDecor(this.palace, id);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private updateDecorText(id: string, text: string): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    d.text = text;
+    this.loci.sync(this.palace); // no re-render: keep focus in the field
+    this.checkpointSoon();
+  }
+
+  private updateDecorPrompt(id: string, prompt: string): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    d.image_prompt = prompt;
+    this.checkpointSoon();
+  }
+
+  private generateDecor(id: string): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    this.openImageGen({
+      prompt: d.image_prompt ?? '',
+      historyKey: `decor:${id}`,
+      current: d.src ?? null,
+      onApprove: (dataUrl) => {
+        d.src = dataUrl;
+        addPropAttachment(d, { type: 'image', src: dataUrl });
+      },
+    });
+  }
+
+  private async attachDecor(id: string, kind: 'image' | 'mesh'): Promise<void> {
+    const file = await pickFile(kind === 'image' ? 'image/*' : '.glb,.gltf,model/gltf-binary');
+    if (!file) return;
+    const d = this.findDecor(id);
+    if (!d) return;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      d.src = dataUrl;
+      addPropAttachment(d, { type: kind, src: dataUrl });
+      this.loci.sync(this.palace);
+      this.checkpoint();
+      this.renderEditor();
+      this.toasts.success(kind === 'image' ? 'Image attached to decor' : '3D model attached to decor');
+    } catch (err) {
+      console.error(err);
+      this.toasts.error(`Couldn't attach "${file.name}"`);
+    }
+  }
+
+  private setDecorScale(id: string, value: number): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    d.scale = value;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private setDecorRotation(id: string, axis: number, value: number): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    const r: Vec3 = d.rotation ?? [0, 0, 0];
+    r[axis] = value;
+    d.rotation = r;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private placeDecor(id: string): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    this.placingDecor = {
+      decorId: id,
+      saved: { position: [...d.local_position] as Vec3, normal: [...d.local_normal] as Vec3 },
+    };
+    this.viewer.fp.setFlying(true);
+    this.enterWalk();
+    this.toasts.info('Placing decor — aim at a surface and click to drop. Esc cancels.');
+  }
+
+  private finishDecorPlacement(): void {
+    if (!this.placingDecor) return;
+    this.placingDecor = null;
+    this.checkpoint();
+    this.toasts.success('Decor placed');
+  }
+
+  private cancelDecorPlacement(): void {
+    if (!this.placingDecor) return;
+    const d = this.findDecor(this.placingDecor.decorId);
+    if (d) {
+      d.local_position = this.placingDecor.saved.position;
+      d.local_normal = this.placingDecor.saved.normal;
+    }
+    this.placingDecor = null;
+    this.loci.sync(this.palace);
+  }
+
+  private makeDecor3d(id: string): void {
+    const d = this.findDecor(id);
+    if (!d?.src) return;
+    const label = snippet(d.image_prompt || `decor ${d.id}`);
+    void this.imageTo3d(d.src, label, (glb) => {
+      d.kind = 'mesh';
+      d.src = glb;
+      d.rotation = d.rotation ?? [0, 0, 0];
+      addPropAttachment(d, { type: 'mesh', src: glb });
     });
   }
 

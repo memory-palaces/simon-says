@@ -109,10 +109,58 @@ export function removeProp(locus: Locus, propId: string): void {
   if (locus.props) locus.props = locus.props.filter((p) => p.id !== propId);
 }
 
-/** Add a variant to a prop's gallery (deduped by src). */
-export function addPropAttachment(prop: SceneProp, att: Attachment): void {
-  if (!prop.gallery) prop.gallery = [];
-  if (!prop.gallery.some((a) => a.type === att.type && a.src === att.src)) prop.gallery.push(att);
+/** Add a variant to a prop's/decor's gallery (deduped by src). */
+export function addPropAttachment(target: { gallery?: Attachment[] }, att: Attachment): void {
+  if (!target.gallery) target.gallery = [];
+  if (!target.gallery.some((a) => a.type === att.type && a.src === att.src)) target.gallery.push(att);
+}
+
+/**
+ * Free-standing decor: a scene element (text/image/mesh) placed anywhere on the
+ * geometry for pure ambiance. Unlike a scene prop it belongs to no locus and is
+ * not part of the recall route — it's set-dressing. Anchored in asset-local
+ * coordinates like a locus/portal, so it survives a GLB swap.
+ */
+export interface Decor {
+  id: string;
+  asset_id: string;
+  local_position: Vec3;
+  local_normal: Vec3;
+  kind: 'text' | 'image' | 'mesh';
+  text?: string;
+  image_prompt?: string;
+  src?: string | null;
+  scale?: number;
+  rotation?: Vec3;
+  gallery?: Attachment[];
+}
+
+export function addDecor(
+  palace: Palace,
+  kind: Decor['kind'],
+  localPosition: Vec3,
+  localNormal: Vec3,
+  assetId = DEFAULT_ASSET_ID,
+): Decor {
+  const decor: Decor = {
+    id: uid('d'),
+    asset_id: assetId,
+    local_position: localPosition,
+    local_normal: localNormal,
+    kind,
+    text: kind === 'text' ? '' : undefined,
+    image_prompt: kind === 'text' ? undefined : '',
+    src: null,
+    scale: 1,
+    rotation: kind === 'mesh' ? [0, 0, 0] : undefined,
+  };
+  if (!palace.decor) palace.decor = [];
+  palace.decor.push(decor);
+  return decor;
+}
+
+export function removeDecor(palace: Palace, id: string): void {
+  if (palace.decor) palace.decor = palace.decor.filter((d) => d.id !== id);
 }
 
 /** Add an attachment to a locus's gallery (deduped by src). */
@@ -208,6 +256,8 @@ export interface Palace {
   zones: Zone[];
   /** First-class portals to other worlds. */
   portals?: Portal[];
+  /** Free-standing decor (ambiance not tied to any locus). */
+  decor?: Decor[];
   /** Optional so older palace files still load; defaults applied on read. */
   environment?: Environment;
   /** Which image pipeline this world uses (credentials are app-global). */
