@@ -8,6 +8,8 @@ import { downloadAsset } from './download';
 
 export interface AssetHandlers {
   onAttach(asset: AssetRef): void;
+  onReplace(asset: AssetRef): void;
+  mountMeshPreview(container: HTMLElement, glbDataUrl: string): void;
   onClose?(): void;
 }
 
@@ -53,6 +55,9 @@ export function openAssetManager(mount: HTMLElement, assets: AssetRef[], handler
   grid.className = 'asset-grid';
   card.appendChild(grid);
 
+  // One shared 3D preview (a single WebGL canvas) follows the mesh you hover.
+  let showFirstMesh: (() => void) | null = null;
+
   for (const a of assets) {
     const cell = document.createElement('div');
     cell.className = 'asset-cell';
@@ -64,10 +69,15 @@ export function openAssetManager(mount: HTMLElement, assets: AssetRef[], handler
       img.src = a.src;
       preview.appendChild(img);
     } else {
+      // A "3D" poster behind a live orbit preview that appears on hover (the single
+      // shared preview canvas moves to whichever mesh you point at).
       const badge = document.createElement('div');
       badge.className = 'asset-3d';
-      badge.textContent = '3D';
+      badge.textContent = '3D · hover to spin';
       preview.appendChild(badge);
+      const show = (): void => handlers.mountMeshPreview(preview, a.src);
+      preview.addEventListener('mouseenter', show);
+      if (!showFirstMesh) showFirstMesh = show;
     }
     cell.appendChild(preview);
 
@@ -81,20 +91,32 @@ export function openAssetManager(mount: HTMLElement, assets: AssetRef[], handler
     const attach = document.createElement('button');
     attach.className = 'btn primary';
     attach.textContent = 'Attach to…';
+    attach.title = 'Reuse this asset on another element';
     attach.onclick = () => {
       close();
       handlers.onAttach(a);
+    };
+    const replace = document.createElement('button');
+    replace.className = 'btn';
+    replace.textContent = 'Replace…';
+    replace.title = `Swap this asset for another everywhere it's used (${a.uses}×)`;
+    replace.onclick = () => {
+      close();
+      handlers.onReplace(a);
     };
     const dl = document.createElement('button');
     dl.className = 'icon-btn';
     dl.textContent = '⬇';
     dl.title = 'Download this file';
     dl.onclick = () => downloadAsset(a.src, `asset-${a.type}`);
-    actions.append(attach, dl);
+    actions.append(attach, replace, dl);
     cell.appendChild(actions);
 
     grid.appendChild(cell);
   }
+
+  // Show one mesh live by default so the 3D preview is visible without hovering.
+  showFirstMesh?.();
 }
 
 function escapeHtml(s: string): string {

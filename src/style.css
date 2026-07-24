@@ -589,6 +589,7 @@ canvas {
   gap: 6px;
 }
 .asset-preview {
+  position: relative;
   aspect-ratio: 1;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.3);
@@ -602,11 +603,19 @@ canvas {
   height: 100%;
   object-fit: contain;
 }
+.asset-preview canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
 .asset-3d {
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   color: #c9adff;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  text-align: center;
+  padding: 0 6px;
 }
 .asset-meta {
   display: flex;
@@ -1458,6 +1467,7 @@ canvas {
   max-width: 560px;
   text-align: center;
   box-shadow: 0 14px 50px rgba(0, 0, 0, 0.55);
+  pointer-events: auto; /* the card is interactive even though the backdrop isn't */
 }
 .review-step {
   font-size: 12px;
@@ -1471,26 +1481,58 @@ canvas {
   font-weight: 650;
   color: var(--ui-fg);
 }
-.review-ask {
-  margin-top: 12px;
-  color: var(--ui-dim);
-  font-size: 14px;
-}
-.review-reveal {
+.review-reveal-text {
   margin-top: 14px;
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.5;
   color: var(--ui-accent);
 }
-.review-hint {
-  margin-top: 18px;
-  color: var(--ui-dim);
-  font-size: 12.5px;
+.review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
 }
-.review-hint kbd {
-  font-size: 11px;
-  padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 4px;
+.review-big {
+  font-size: 15px;
+  font-weight: 650;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  background: var(--ui-accent);
+  color: #1a1400;
+  cursor: pointer;
+}
+.review-big:hover {
+  filter: brightness(1.08);
+}
+.review-nav {
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ui-fg);
+  cursor: pointer;
+}
+.review-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.review-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.review-exit {
+  margin-top: 14px;
+}
+.review-exit-btn {
+  font-size: 12px;
+  color: var(--ui-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.review-exit-btn:hover {
+  color: var(--ui-fg);
 }

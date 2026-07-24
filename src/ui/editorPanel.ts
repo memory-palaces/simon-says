@@ -114,6 +114,8 @@ export class EditorPanel {
 
   /** Whether the local save/open server is available (drives the header buttons). */
   private serverOnline = false;
+  /** The folder the server saves into (shown so it's clear where worlds go). */
+  private serverDir: string | null = null;
 
   /** Nesting depth + breadcrumb trail, for the Return bar. */
   private nesting: { depth: number; trail: string[] } = { depth: 0, trail: [] };
@@ -155,8 +157,9 @@ export class EditorPanel {
     this.nesting = { depth, trail };
   }
 
-  setServerOnline(online: boolean): void {
+  setServerInfo(online: boolean, dir: string | null): void {
     this.serverOnline = online;
+    this.serverDir = dir;
   }
 
   setGeneration(gen: GenState): void {
@@ -204,9 +207,9 @@ export class EditorPanel {
     if (this.serverOnline) {
       // Two systems: Save/Open keep worlds on THIS computer; Import/Export use files.
       const save = button('Save', '', () => this.handlers.save());
-      save.title = 'Save this world on your computer';
+      save.title = this.serverDir ? `Save this world into ${this.serverDir}` : 'Save this world on your computer';
       const open = button('Open', '', () => this.handlers.load());
-      open.title = 'Open a world saved on your computer';
+      open.title = this.serverDir ? `Open a world from ${this.serverDir}` : 'Open a world saved on your computer';
       const imp = button('Import', '', () => this.handlers.importFile());
       imp.title = 'Load a .json world file — e.g. one you downloaded earlier';
       const exp = button('Export', '', () => this.handlers.exportFile());
@@ -253,8 +256,9 @@ export class EditorPanel {
 
     const autosave = div('editor-autosave');
     if (this.serverOnline) {
+      const folder = this.serverDir ? `<code>${escapeHtml(this.serverDir)}</code>` : 'a folder on your computer';
       autosave.innerHTML =
-        '✓ Autosaves as you work. <b>Save</b> / <b>Open</b> keep worlds on your computer; <b>Import</b> / <b>Export</b> use .json files. ' +
+        `✓ Autosaves as you work. <b>Save</b> / <b>Open</b> keep worlds in ${folder}; <b>Import</b> / <b>Export</b> use .json files. ` +
         'Have a .json from before? <b>Import</b> it, then <b>Save</b>.';
     } else {
       autosave.textContent = '✓ Autosaves to this browser as you work · Save / Open use .json files';
@@ -1006,6 +1010,12 @@ function div(className: string): HTMLElement {
 /** A thin vertical divider to group related header buttons. */
 function sep(): HTMLElement {
   return div('editor-sep');
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+  );
 }
 
 /** A filesystem-safe base name for a locus's exported asset. */

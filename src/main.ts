@@ -7,8 +7,8 @@ import { Overlay } from './ui/overlay';
 import { EditorPanel } from './ui/editorPanel';
 import { ReviewOverlay } from './ui/review';
 import { openPalace, readPalaceFile, savePalace } from './model/persistence';
-import { listServerPalaces, loadServerPalace, saveServerPalace, serverAvailable } from './model/server';
-import { collectAssets, type AssetRef } from './model/assets';
+import { listServerPalaces, loadServerPalace, saveServerPalace, serverInfo } from './model/server';
+import { collectAssets, replaceAssetEverywhere, type AssetRef } from './model/assets';
 import { openAssetManager } from './ui/assetManager';
 import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
@@ -71,7 +71,12 @@ class App {
   private readonly loci = new LociLayer(this.viewer.scene, this.viewer.resolveAsset);
   private readonly overlay = new Overlay(this.mount);
   private readonly editor: EditorPanel;
-  private readonly review = new ReviewOverlay(this.mount);
+  private readonly review = new ReviewOverlay(this.mount, {
+    reveal: () => this.reviewReveal(),
+    prev: () => this.reviewStep(-1),
+    next: () => this.reviewStep(1),
+    exit: () => this.endReview(),
+  });
   private readonly toasts = new Toasts(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
   private readonly meshPreview = new MeshPreview();
@@ -121,6 +126,8 @@ class App {
   private fileHandle: FileSystemFileHandle | null = null;
   /** Whether the local dev-server save/open API is reachable. */
   private serverOnline = false;
+  /** Absolute path of the folder the server saves worlds into. */
+  private serverDir: string | null = null;
   /** The server filename this palace is bound to, so Save overwrites it. */
   private serverName: string | null = null;
 
@@ -259,9 +266,10 @@ class App {
   private async boot(): Promise<void> {
     // Detect the local save/open server (present when run via the dev server) so
     // Save/Open write straight to disk instead of downloading a file each time.
-    void serverAvailable().then((online) => {
+    void serverInfo().then(({ online, dir }) => {
       this.serverOnline = online;
-      this.editor.setServerOnline(online);
+      this.serverDir = dir;
+      this.editor.setServerInfo(online, dir);
       if (this.mode === 'edit') this.renderEditor();
     });
 
@@ -354,7 +362,8 @@ class App {
       await saveServerPalace(name, this.root);
       this.serverName = name;
       this.savedClean = true;
-      this.toasts.success(`Saved “${this.root.name}” on localhost (${name}.json)`);
+      const where = this.serverDir ? `${this.serverDir}/${name}.json` : `${name}.json`;
+      this.toasts.success(`Saved to ${where}`);
     } catch (err) {
       console.error(err);
       this.toasts.error('Could not save to localhost.');
@@ -795,6 +804,12 @@ class App {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
         this.reviewAdvance();
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        this.reviewStep(1);
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        this.reviewStep(-1);
       } else if (e.code === 'Escape') {
         this.endReview();
       }
@@ -1469,7 +1484,36 @@ class App {
       return;
     }
     if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
-    openAssetManager(this.mount, items, { onAttach: (a) => void this.attachAssetTo(a) });
+    openAssetManager(this.mount, items, {
+      onAttach: (a) => void this.attachAssetTo(a),
+      onReplace: (a) => void this.replaceAssetFlow(a),
+      mountMeshPreview: (c, src) => this.meshPreview.attach(c, src),
+    });
+  }
+
+  /** Swap an asset for another (existing) one everywhere it's used. */
+  private async replaceAssetFlow(a: AssetRef): Promise<void> {
+    const others = collectAssets(this.palace).filter((x) => x.src !== a.src);
+    if (others.length === 0) {
+      this.toasts.info('No other asset to replace it with — make or upload another first.');
+      return;
+    }
+    const choice = await chooseAction(this.mount, {
+      title: `Replace this ${a.type} everywhere (${a.uses}×)`,
+      message: 'Pick the asset to use instead — every place using the old one switches to it:',
+      choices: [
+        ...others.map((o) => ({ id: o.src, label: `${o.type === 'mesh' ? '◈ 3D' : '▦ Image'} — ${o.label}`, sublabel: `used ${o.uses}×` })),
+        { id: '__cancel', label: 'Cancel' },
+      ],
+    });
+    if (!choice || choice === '__cancel') return;
+    const replacement = others.find((o) => o.src === choice);
+    if (!replacement) return;
+    const n = replaceAssetEverywhere(this.palace, a.src, replacement.src, replacement.type);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+    this.toasts.success(`Replaced in ${n} ${n === 1 ? 'place' : 'places'}.`);
   }
 
   /** Reuse an existing asset by attaching it to another element. */
@@ -1688,29 +1732,39 @@ class App {
     this.review.showCue(this.reviewIndex + 1, this.reviewRoute.length, locus.label);
   }
 
+  /** Reveal the current locus's mnemonic. */
+  private reviewReveal(): void {
+    if (this.reviewIndex >= this.reviewRoute.length) return;
+    const locus = this.reviewRoute[this.reviewIndex];
+    this.reviewRevealed = true;
+    locus.last_reviewed = new Date().toISOString();
+    this.markDirty();
+    const isLast = this.reviewIndex === this.reviewRoute.length - 1;
+    this.review.showReveal(this.reviewIndex + 1, this.reviewRoute.length, locus.label, locus.image_prompt, isLast);
+  }
+
+  /** Move to the previous/next locus (past the end shows the done card). */
+  private reviewStep(delta: 1 | -1): void {
+    const next = this.reviewIndex + delta;
+    if (next < 0) return;
+    if (next >= this.reviewRoute.length) {
+      this.reviewIndex = this.reviewRoute.length;
+      this.review.showDone(this.reviewRoute.length);
+      return;
+    }
+    this.reviewIndex = next;
+    this.reviewRevealed = false;
+    this.showReviewStep();
+  }
+
+  /** Space/Enter: reveal if hidden, otherwise advance. */
   private reviewAdvance(): void {
-    // Past the last locus: the "done" card is showing — Space exits.
     if (this.reviewIndex >= this.reviewRoute.length) {
       this.endReview();
       return;
     }
-    const locus = this.reviewRoute[this.reviewIndex];
-    if (!this.reviewRevealed) {
-      this.reviewRevealed = true;
-      locus.last_reviewed = new Date().toISOString();
-      this.markDirty();
-      const isLast = this.reviewIndex === this.reviewRoute.length - 1;
-      this.review.showReveal(this.reviewIndex + 1, this.reviewRoute.length, locus.label, locus.image_prompt, isLast);
-      return;
-    }
-    // Advance to the next locus (or the done card).
-    this.reviewIndex += 1;
-    this.reviewRevealed = false;
-    if (this.reviewIndex >= this.reviewRoute.length) {
-      this.review.showDone(this.reviewRoute.length);
-    } else {
-      this.showReviewStep();
-    }
+    if (!this.reviewRevealed) this.reviewReveal();
+    else this.reviewStep(1);
   }
 
   private endReview(): void {

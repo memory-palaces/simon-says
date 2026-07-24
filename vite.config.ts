@@ -40,7 +40,7 @@ function palaceServer(): Plugin {
         const url = (req.url || '').split('?')[0];
         if (!url.startsWith('/api/')) return next();
         try {
-          if (url === '/api/ping') return sendJson(res, 200, { palaceServer: true });
+          if (url === '/api/ping') return sendJson(res, 200, { palaceServer: true, dir });
 
           if (url === '/api/palaces') {
             await fs.mkdir(dir, { recursive: true });

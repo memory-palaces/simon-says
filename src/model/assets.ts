@@ -4,7 +4,7 @@
  * registry); this just walks the palace and dedupes by data URL so you can see,
  * download, or reuse anything you've made or uploaded.
  */
-import type { Palace } from './palace';
+import type { Attachment, Palace } from './palace';
 
 export interface AssetRef {
   src: string;
@@ -45,4 +45,70 @@ export function collectAssets(palace: Palace): AssetRef[] {
   }
 
   return [...map.entries()].map(([src, v]) => ({ src, ...v }));
+}
+
+/**
+ * Swap every reference to one asset for another, everywhere in the world — so
+ * reusing the same image/mesh in six places and then replacing it updates all six.
+ * Handles a type change (image<->mesh) by moving to the right slot/kind.
+ */
+export function replaceAssetEverywhere(palace: Palace, oldSrc: string, newSrc: string, newType: 'image' | 'mesh'): number {
+  let n = 0;
+  const swapGallery = (gal?: Attachment[]): void => {
+    for (const g of gal ?? []) {
+      if (g.src === oldSrc) {
+        g.src = newSrc;
+        g.type = newType;
+        n++;
+      }
+    }
+  };
+
+  for (const l of palace.loci) {
+    if (l.image_2d === oldSrc) {
+      if (newType === 'image') l.image_2d = newSrc;
+      else {
+        l.image_2d = null;
+        l.mesh_3d = newSrc;
+      }
+      n++;
+    }
+    if (l.mesh_3d === oldSrc) {
+      if (newType === 'mesh') l.mesh_3d = newSrc;
+      else {
+        l.mesh_3d = null;
+        l.image_2d = newSrc;
+      }
+      n++;
+    }
+    swapGallery(l.gallery);
+    for (const p of l.props ?? []) {
+      if (p.src === oldSrc) {
+        p.src = newSrc;
+        p.kind = newType;
+        if (newType === 'mesh') p.rotation = p.rotation ?? [0, 0, 0];
+        n++;
+      }
+      swapGallery(p.gallery);
+    }
+  }
+  for (const d of palace.decor ?? []) {
+    if (d.src === oldSrc) {
+      d.src = newSrc;
+      d.kind = newType;
+      if (newType === 'mesh') d.rotation = d.rotation ?? [0, 0, 0];
+      n++;
+    }
+    swapGallery(d.gallery);
+  }
+  for (const p of palace.portals ?? []) {
+    if (p.src === oldSrc) {
+      p.src = newSrc;
+      p.kind = newType;
+      if (newType === 'mesh') p.rotation = p.rotation ?? [0, 0, 0];
+      n++;
+    }
+    swapGallery(p.gallery);
+  }
+  return n;
 }

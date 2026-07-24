@@ -13,15 +13,15 @@ export interface ServerItem {
   mtime: number;
 }
 
-/** Is the local save/open API reachable? (False for a plain static build.) */
-export async function serverAvailable(): Promise<boolean> {
+/** Is the local save/open API reachable, and where does it save? */
+export async function serverInfo(): Promise<{ online: boolean; dir: string | null }> {
   try {
     const r = await fetch('/api/ping');
-    if (!r.ok) return false;
-    const j = (await r.json()) as { palaceServer?: boolean };
-    return j?.palaceServer === true;
+    if (!r.ok) return { online: false, dir: null };
+    const j = (await r.json()) as { palaceServer?: boolean; dir?: string };
+    return { online: j?.palaceServer === true, dir: j?.dir ?? null };
   } catch {
-    return false;
+    return { online: false, dir: null };
   }
 }
 
