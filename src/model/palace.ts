@@ -182,6 +182,13 @@ export interface Portal {
   label: string;
   /** The world this portal leads to (embedded), created lazily on first entry. */
   target: Palace | null;
+  /** Optional visual shown at the doorway (besides the ring): an image or 3D model. */
+  kind?: 'image' | 'mesh';
+  image_prompt?: string;
+  src?: string | null;
+  scale?: number;
+  rotation?: Vec3;
+  gallery?: Attachment[];
 }
 
 export function addPortal(palace: Palace, localPosition: Vec3, localNormal: Vec3, assetId = DEFAULT_ASSET_ID): Portal {

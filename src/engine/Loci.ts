@@ -66,7 +66,7 @@ interface Marker {
 export class LociLayer {
   private readonly group = new THREE.Group();
   private readonly markers = new Map<string, Marker>();
-  private readonly portalMarkers = new Map<string, { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh }>();
+  private readonly portalMarkers = new Map<string, { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh; po?: PropObj }>();
   private readonly decorMarkers = new Map<string, { group: THREE.Group; po: PropObj; normal: THREE.Vector3 }>();
   private readonly resolve: ResolveAsset;
   private readonly labelTextures = new Map<number, THREE.Texture>();
@@ -198,16 +198,40 @@ export class LociLayer {
       // Float the ring off the surface (into the room) so it doesn't straddle the wall.
       pm.group.position.copy(this.v).addScaledVector(this.n, 0.4);
       pm.ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.n);
+
+      // Optional visual (image/mesh) shown at the doorway alongside the ring.
+      if (portal.kind && portal.src) {
+        if (!pm.po || pm.po.kind !== portal.kind) {
+          if (pm.po) {
+            pm.group.remove(pm.po.object);
+            disposePropObject(pm.po);
+          }
+          pm.po = buildProp(portal.kind);
+          pm.group.add(pm.po.object);
+        }
+        const pseudo: SceneProp = { id: portal.id, kind: portal.kind, src: portal.src, image_prompt: portal.image_prompt, scale: portal.scale, rotation: portal.rotation };
+        if (portal.kind === 'image') this.updatePropImage(pm.po, portal.src ?? null);
+        else void this.updatePropMesh(pm.po, pseudo);
+        this.scaleProp(pm.po, pseudo);
+        const s = portal.scale ?? 1;
+        const push = portal.kind === 'mesh' ? 0.4 * s + 0.15 : 0.5;
+        pm.po.object.position.copy(this.n).multiplyScalar(push);
+      } else if (pm.po) {
+        pm.group.remove(pm.po.object);
+        disposePropObject(pm.po);
+        pm.po = undefined;
+      }
     }
     for (const [id, pm] of this.portalMarkers) {
       if (!live.has(id)) {
+        if (pm.po) disposePropObject(pm.po);
         this.group.remove(pm.group);
         this.portalMarkers.delete(id);
       }
     }
   }
 
-  private createPortal(id: string): { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh } {
+  private createPortal(id: string): { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh; po?: PropObj } {
     const group = new THREE.Group();
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.34, 0.05, 16, 48),
@@ -218,7 +242,7 @@ export class LociLayer {
     hit.userData.portalId = id;
     group.add(ring, hit);
     this.group.add(group);
-    const pm = { group, ring, hit };
+    const pm: { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh; po?: PropObj } = { group, ring, hit };
     this.portalMarkers.set(id, pm);
     return pm;
   }

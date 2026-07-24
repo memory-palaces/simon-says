@@ -53,6 +53,7 @@ import {
   type Decor,
   type Locus,
   type Palace,
+  type Portal,
   type SceneProp,
   type Vec3,
 } from './model/palace';
@@ -191,6 +192,15 @@ class App {
       renamePortal: (id, name) => this.renamePortal(id, name),
       gotoPortal: (id) => this.gotoPortal(id),
       returnToParent: () => this.returnToParent(),
+      addPortalVisual: (id, kind) => this.addPortalVisual(id, kind),
+      removePortalVisual: (id) => this.removePortalVisual(id),
+      updatePortalPrompt: (id, prompt) => this.updatePortalPrompt(id, prompt),
+      generatePortalImage: (id) => this.generatePortalImage(id),
+      attachPortalImage: (id) => void this.attachPortal(id, 'image'),
+      attachPortalMesh: (id) => void this.attachPortal(id, 'mesh'),
+      setPortalScale: (id, v) => this.setPortalScale(id, v),
+      setPortalRotation: (id, axis, v) => this.setPortalRotation(id, axis, v),
+      makePortal3d: (id) => this.makePortal3d(id),
       addProp: (locusId, kind) => this.addProp(locusId, kind),
       removeProp: (locusId, propId) => this.removeProp(locusId, propId),
       updatePropText: (locusId, propId, text) => this.updatePropText(locusId, propId, text),
@@ -1308,6 +1318,106 @@ class App {
       d.src = glb;
       d.rotation = d.rotation ?? [0, 0, 0];
       addPropAttachment(d, { type: 'mesh', src: glb });
+    });
+  }
+
+  // --- Portal visuals --------------------------------------------------------
+
+  private findPortal(id: string): Portal | undefined {
+    return this.palace.portals?.find((p) => p.id === id);
+  }
+
+  private addPortalVisual(id: string, kind: 'image' | 'mesh'): void {
+    const p = this.findPortal(id);
+    if (!p) return;
+    p.kind = kind;
+    p.image_prompt = p.image_prompt ?? '';
+    p.scale = p.scale ?? 1;
+    if (kind === 'mesh') p.rotation = p.rotation ?? [0, 0, 0];
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private removePortalVisual(id: string): void {
+    const p = this.findPortal(id);
+    if (!p) return;
+    p.kind = undefined;
+    p.src = null;
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+  }
+
+  private updatePortalPrompt(id: string, prompt: string): void {
+    const p = this.findPortal(id);
+    if (!p) return;
+    p.image_prompt = prompt;
+    this.checkpointSoon();
+  }
+
+  private generatePortalImage(id: string): void {
+    const p = this.findPortal(id);
+    if (!p) return;
+    this.openImageGen({
+      prompt: p.image_prompt ?? '',
+      historyKey: `portal:${id}`,
+      current: p.src ?? null,
+      onApprove: (dataUrl) => {
+        p.kind = 'image';
+        p.src = dataUrl;
+        addPropAttachment(p, { type: 'image', src: dataUrl });
+      },
+    });
+  }
+
+  private async attachPortal(id: string, kind: 'image' | 'mesh'): Promise<void> {
+    const file = await pickFile(kind === 'image' ? 'image/*' : '.glb,.gltf,model/gltf-binary');
+    if (!file) return;
+    const p = this.findPortal(id);
+    if (!p) return;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      p.kind = kind;
+      p.src = dataUrl;
+      addPropAttachment(p, { type: kind, src: dataUrl });
+      this.loci.sync(this.palace);
+      this.checkpoint();
+      this.renderEditor();
+      this.toasts.success(kind === 'image' ? 'Image attached to portal' : '3D model attached to portal');
+    } catch (err) {
+      console.error(err);
+      this.toasts.error(`Couldn't attach "${file.name}"`);
+    }
+  }
+
+  private setPortalScale(id: string, value: number): void {
+    const p = this.findPortal(id);
+    if (!p) return;
+    p.scale = value;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private setPortalRotation(id: string, axis: number, value: number): void {
+    const p = this.findPortal(id);
+    if (!p) return;
+    const r: Vec3 = p.rotation ?? [0, 0, 0];
+    r[axis] = value;
+    p.rotation = r;
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  private makePortal3d(id: string): void {
+    const p = this.findPortal(id);
+    if (!p?.src) return;
+    const label = snippet(p.image_prompt || p.label || `portal ${p.id}`);
+    void this.imageTo3d(p.src, label, (glb) => {
+      p.kind = 'mesh';
+      p.src = glb;
+      p.rotation = p.rotation ?? [0, 0, 0];
+      addPropAttachment(p, { type: 'mesh', src: glb });
     });
   }
 

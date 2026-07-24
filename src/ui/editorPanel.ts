@@ -1,4 +1,4 @@
-import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Decor, type Locus, type Palace, type SceneProp } from '../model/palace';
+import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Decor, type Locus, type Palace, type Portal, type SceneProp } from '../model/palace';
 import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
 
 interface GenState {
@@ -55,6 +55,16 @@ export interface EditorHandlers {
   renamePortal(id: string, name: string): void;
   gotoPortal(id: string): void;
   returnToParent(): void;
+  // Optional portal visuals.
+  addPortalVisual(id: string, kind: 'image' | 'mesh'): void;
+  removePortalVisual(id: string): void;
+  updatePortalPrompt(id: string, prompt: string): void;
+  generatePortalImage(id: string): void;
+  attachPortalImage(id: string): void;
+  attachPortalMesh(id: string): void;
+  setPortalScale(id: string, value: number): void;
+  setPortalRotation(id: string, axis: number, value: number): void;
+  makePortal3d(id: string): void;
   // Scene props (extra elements composed around a locus).
   addProp(locusId: string, kind: 'text' | 'image' | 'mesh'): void;
   removeProp(locusId: string, propId: string): void;
@@ -840,8 +850,94 @@ export class EditorPanel {
       ctrls.appendChild(iconButton('🗑', 'remove portal', () => this.handlers.removePortal(portal.id)));
       row.appendChild(ctrls);
       wrap.appendChild(row);
+      wrap.appendChild(this.portalVisualBlock(portal));
     }
     return wrap;
+  }
+
+  /** Optional image/3D shown at a doorway (besides the ring). */
+  private portalVisualBlock(portal: Portal): HTMLElement {
+    const card = div('prop-card');
+    if (!portal.kind) {
+      const hint = div('scene-hint');
+      hint.textContent = 'Doorway visual (optional):';
+      card.appendChild(hint);
+      const btns = div('locus-gen-row');
+      btns.appendChild(button('+ Image', '', () => this.handlers.addPortalVisual(portal.id, 'image')));
+      btns.appendChild(button('+ 3D', '', () => this.handlers.addPortalVisual(portal.id, 'mesh')));
+      card.appendChild(btns);
+      return card;
+    }
+
+    const head = div('prop-head');
+    const badge = document.createElement('span');
+    badge.className = 'prop-badge prop-' + portal.kind;
+    badge.textContent = portal.kind === 'image' ? 'Image' : '3D';
+    head.appendChild(badge);
+    head.appendChild(iconButton('✕', 'Remove visual', () => this.handlers.removePortalVisual(portal.id)));
+    card.appendChild(head);
+
+    const f = field('Image prompt (rendered by the AI)', 'e.g. "an ornate archway of vines"', true);
+    const input = f.input as HTMLTextAreaElement;
+    input.value = portal.image_prompt ?? '';
+    input.oninput = () => this.handlers.updatePortalPrompt(portal.id, input.value);
+    card.appendChild(f.el);
+
+    const row = div('locus-gen-row');
+    if (portal.kind === 'image') {
+      row.appendChild(button('✨ Render', 'primary', () => this.handlers.generatePortalImage(portal.id)));
+      row.appendChild(button('📎 Attach image', '', () => this.handlers.attachPortalImage(portal.id)));
+    } else {
+      row.appendChild(button('📎 Attach 3D', '', () => this.handlers.attachPortalMesh(portal.id)));
+    }
+    card.appendChild(row);
+
+    if (portal.kind === 'image' && portal.src) {
+      const thumb = document.createElement('img');
+      thumb.className = 'prop-thumb';
+      thumb.src = portal.src;
+      card.appendChild(thumb);
+      const row2 = div('locus-gen-row');
+      if (this.gen.can3d) row2.appendChild(button('⬗ Make 3D', '', () => this.handlers.makePortal3d(portal.id)));
+      row2.appendChild(iconButton('⬇', 'download image', () => downloadAsset(portal.src!, `portal-${portal.id}`)));
+      card.appendChild(row2);
+    } else if (portal.kind === 'mesh' && portal.src) {
+      const holder = div('prop-mesh-preview');
+      this.handlers.mountMeshPreview(holder, portal.src);
+      card.appendChild(holder);
+      const row2 = div('locus-gen-row');
+      row2.appendChild(iconButton('⬇', 'download 3D model', () => downloadAsset(portal.src!, `portal-${portal.id}`)));
+      card.appendChild(row2);
+    }
+
+    card.appendChild(
+      sliderRow({
+        label: 'Scale',
+        min: 0.2,
+        max: 5,
+        step: 0.1,
+        value: portal.scale ?? 1,
+        def: 1,
+        onChange: (v) => this.handlers.setPortalScale(portal.id, v),
+      }),
+    );
+    if (portal.kind === 'mesh') {
+      const rot = portal.rotation ?? [0, 0, 0];
+      ['Rotate X', 'Rotate Y', 'Rotate Z'].forEach((label, axis) => {
+        card.appendChild(
+          sliderRow({
+            label,
+            min: -180,
+            max: 180,
+            step: 5,
+            value: rot[axis],
+            def: 0,
+            onChange: (v) => this.handlers.setPortalRotation(portal.id, axis, v),
+          }),
+        );
+      });
+    }
+    return card;
   }
 
   private generationSection(): HTMLElement {
