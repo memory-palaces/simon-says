@@ -67,7 +67,7 @@ export class LociLayer {
   private readonly group = new THREE.Group();
   private readonly markers = new Map<string, Marker>();
   private readonly portalMarkers = new Map<string, { group: THREE.Group; ring: THREE.Mesh; hit: THREE.Mesh; po?: PropObj }>();
-  private readonly decorMarkers = new Map<string, { group: THREE.Group; po: PropObj; normal: THREE.Vector3 }>();
+  private readonly decorMarkers = new Map<string, { group: THREE.Group; po: PropObj; normal: THREE.Vector3; hit: THREE.Mesh }>();
   private readonly resolve: ResolveAsset;
   private readonly labelTextures = new Map<number, THREE.Texture>();
 
@@ -152,9 +152,12 @@ export class LociLayer {
         }
         const group = new THREE.Group();
         const po = buildProp(d.kind);
-        group.add(po.object);
+        // Invisible sphere so the crosshair can target decor (for G-move / tooltips).
+        const hit = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
+        hit.userData.decorId = d.id;
+        group.add(po.object, hit);
         this.group.add(group);
-        dm = { group, po, normal: new THREE.Vector3() };
+        dm = { group, po, normal: new THREE.Vector3(), hit };
         this.decorMarkers.set(d.id, dm);
       }
 
@@ -174,6 +177,9 @@ export class LociLayer {
       const s = d.scale ?? 1;
       const push = d.kind === 'mesh' ? 0.4 * s + 0.15 : 0.4;
       dm.po.object.position.copy(this.n).multiplyScalar(push);
+      // Keep the pick sphere over the visual, sized to it.
+      dm.hit.position.copy(dm.po.object.position);
+      dm.hit.scale.setScalar(Math.max(0.5, 0.7 * s));
     }
     for (const [id, dm] of this.decorMarkers) {
       if (!live.has(id)) {
@@ -253,6 +259,14 @@ export class LociLayer {
     for (const pm of this.portalMarkers.values()) hits.push(pm.hit);
     const found = raycaster.intersectObjects(hits, false);
     return found.length > 0 ? (found[0].object.userData.portalId as string) : null;
+  }
+
+  /** The decor id under a ray (crosshair), or null. */
+  pickDecor(raycaster: THREE.Raycaster): string | null {
+    const hits: THREE.Object3D[] = [];
+    for (const dm of this.decorMarkers.values()) hits.push(dm.hit);
+    const found = raycaster.intersectObjects(hits, false);
+    return found.length > 0 ? (found[0].object.userData.decorId as string) : null;
   }
 
   worldPositionOfPortal(portal: Portal, out: THREE.Vector3): THREE.Vector3 {

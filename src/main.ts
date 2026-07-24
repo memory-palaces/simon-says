@@ -97,6 +97,7 @@ class App {
   private mode: Mode = 'edit';
   private selectedId: string | null = null;
   private targetedId: string | null = null;
+  private targetedDecorId: string | null = null;
   private movingId: string | null = null;
   /** A scene prop being placed/moved in-world by aiming at a surface. */
   private placingProp: { locusId: string; propId: string; savedOffset: Vec3 } | null = null;
@@ -485,6 +486,7 @@ class App {
     if (this.selectedId && !this.palace.loci.some((l) => l.id === this.selectedId)) this.selectedId = null;
     this.movingId = null;
     this.targetedId = null;
+    this.targetedDecorId = null;
     this.loci.setTargeted(null);
     this.loci.setSelected(this.selectedId);
     this.viewer.applyEnvironment(this.palace.environment);
@@ -648,13 +650,16 @@ class App {
         }, false);
         this.loci.sync(this.palace);
       } else {
-        // Highlight whatever the crosshair is over — a portal takes priority.
+        // Highlight whatever the crosshair is over — a portal takes priority, then a
+        // locus, then free-standing decor.
         const ray = this.crosshairRay();
         const portalId = this.loci.pickPortal(ray);
         const locusId = portalId ? null : this.loci.pick(ray);
-        if (portalId !== this.targetedPortalId || locusId !== this.targetedId) {
+        const decorId = portalId || locusId ? null : this.loci.pickDecor(ray);
+        if (portalId !== this.targetedPortalId || locusId !== this.targetedId || decorId !== this.targetedDecorId) {
           this.targetedPortalId = portalId;
           this.targetedId = locusId;
+          this.targetedDecorId = decorId;
           this.loci.setTargeted(locusId);
           this.updateTooltip();
         }
@@ -669,6 +674,12 @@ class App {
       const p = this.palace.portals?.find((x) => x.id === this.targetedPortalId);
       const name = escapeHtml(p?.label || (p?.target ? p.target.name : 'New world'));
       this.overlay.setTooltip(`<div class="tt-title">Portal</div><div class="tt-door">↳ ${name} — Enter</div>`);
+      return;
+    }
+    if (this.targetedDecorId) {
+      const d = this.findDecor(this.targetedDecorId);
+      const what = escapeHtml(d?.text || d?.image_prompt || 'Decor');
+      this.overlay.setTooltip(`<div class="tt-title">Decor</div><div class="tt-door">${what} — [G] move</div>`);
       return;
     }
     const t = this.targetedId ? this.palace.loci.find((l) => l.id === this.targetedId) : null;
@@ -693,9 +704,10 @@ class App {
   private updateWalkHud(): void {
     const n = this.palace.loci.length;
     const parts = [`${n} ${n === 1 ? 'locus' : 'loci'}`];
-    if (this.placingProp || this.placingDecor) parts.push('placing — click to drop · Esc cancels');
-    else if (this.movingId) parts.push('moving — [T] drop');
+    if (this.placingProp || this.placingDecor) parts.push('placing — [G]/click to drop · Esc cancels');
+    else if (this.movingId) parts.push('moving — [G]/[T] drop');
     else if (this.targetedPortalId) parts.push('portal — [Enter] go through');
+    else if (this.targetedDecorId) parts.push('decor — [G] move');
     else if (this.targetedId) {
       const t = this.palace.loci.find((l) => l.id === this.targetedId);
       const name = t?.label ? `“${t.label}”` : 'marker';
@@ -769,7 +781,7 @@ class App {
     if (this.mode === 'walk') {
       if (e.code === 'KeyT') this.dropOrPlace();
       else if (e.code === 'KeyB') this.deleteTargeted();
-      else if (e.code === 'KeyG') this.toggleMove();
+      else if (e.code === 'KeyG') this.genericMove();
       else if (e.code === 'KeyR') this.recenterView();
       else if (e.code === 'KeyX') this.toggleXray();
       else if (e.code === 'KeyP') this.placePortal();
@@ -821,6 +833,26 @@ class App {
       this.selectedId = this.targetedId;
       this.loci.setSelected(this.targetedId);
     }
+  }
+
+  /** G is the generic "grab & move": drop what's held, else grab what's aimed at. */
+  private genericMove(): void {
+    if (this.placingDecor) return this.finishDecorPlacement();
+    if (this.placingProp) return this.finishPropPlacement();
+    if (this.movingId) return this.toggleMove(); // drop the held locus
+    if (this.targetedId) return this.toggleMove(); // grab the aimed-at locus
+    if (this.targetedDecorId) return this.beginDecorMove(this.targetedDecorId);
+  }
+
+  /** Grab a decor item at the crosshair; it then follows until G/click drops it. */
+  private beginDecorMove(id: string): void {
+    const d = this.findDecor(id);
+    if (!d) return;
+    this.placingDecor = {
+      decorId: id,
+      saved: { position: [...d.local_position] as Vec3, normal: [...d.local_normal] as Vec3 },
+    };
+    this.toasts.info('Moving decor — aim, then G or click to drop. Esc cancels.');
   }
 
   // --- Editor handlers -------------------------------------------------------
