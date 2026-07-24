@@ -284,6 +284,7 @@ class App {
       this.loci.sync(this.palace);
       this.history.reset(this.root);
       this.setMode('edit');
+      if (this.viewer.hasModel) this.recenterView(false, true); // frame it, don't start buried inside
     } catch (err) {
       console.error(err);
       this.overlay.showError(
@@ -1722,18 +1723,18 @@ class App {
   }
 
   /** Fly to locus #1 (or the framed model if there are no loci yet). */
-  private recenterView(): void {
+  private recenterView(announce = true, instant = false): void {
     const first = lociInOrder(this.palace)[0];
     if (first) {
-      this.gotoLocusObject(first);
-      this.toasts.info(`Centered on #${first.order}${first.label ? ` — ${first.label}` : ''}`);
+      this.gotoLocusObject(first, instant ? 0 : this.gotoMs);
+      if (announce) this.toasts.info(`Centered on #${first.order}${first.label ? ` — ${first.label}` : ''}`);
     } else {
       this.viewer.recenter();
     }
   }
 
   /** Glide to a spot off the locus, looking at it. Stand back further for big objects. */
-  private gotoLocusObject(locus: Locus): void {
+  private gotoLocusObject(locus: Locus, durationMs = this.gotoMs): void {
     const pos = this.loci.worldPosition(locus, this.scratchA);
     const normal = this.loci.worldNormal(locus, this.scratchB);
     // Stand back along the surface normal, but keep it mostly horizontal so we
@@ -1746,7 +1747,7 @@ class App {
     const viewPos = pos.clone().addScaledVector(horiz, 2.2 * s);
     viewPos.y = pos.y + 0.8 * s;
     this.viewer.fp.setFlying(true); // float at the target, don't drop
-    this.viewer.flyTo(viewPos, pos, this.gotoMs);
+    this.viewer.flyTo(viewPos, pos, durationMs);
   }
 
   // --- Portals (nested worlds) -----------------------------------------------
@@ -2064,6 +2065,11 @@ class App {
         this.fileHandle = opened.handle; // save writes back to this file
         this.serverName = null; // opened from a file, not the server
         await this.adoptPalace(opened.palace);
+        // When the local server is available, nudge the migration path: this world
+        // came from a file — one click of Save moves it onto the computer.
+        if (this.serverOnline) {
+          this.toasts.info(`Imported “${opened.palace.name}”. Click Save to keep it on your computer.`);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -2106,6 +2112,8 @@ class App {
   private finishLoad(): void {
     if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
     this.setMode('edit');
+    // Frame the world like Recenter does, so you don't start buried inside it.
+    if (this.viewer.hasModel) this.recenterView(false, true);
   }
 }
 

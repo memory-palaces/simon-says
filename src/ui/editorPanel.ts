@@ -202,22 +202,22 @@ export class EditorPanel {
     const actions = div('editor-actions');
     actions.appendChild(button('▶ Enter', 'primary', () => this.handlers.enterWalk()));
     if (this.serverOnline) {
-      // Real save/open to this machine; file .json becomes explicit Export/Import.
+      // Two systems: Save/Open keep worlds on THIS computer; Import/Export use files.
       const save = button('Save', '', () => this.handlers.save());
-      save.title = 'Save to this computer (the localhost dev server) — nothing is uploaded';
+      save.title = 'Save this world on your computer';
       const open = button('Open', '', () => this.handlers.load());
-      open.title = 'Open a world saved on this computer';
-      actions.append(save, open);
-      const tag = document.createElement('span');
-      tag.className = 'server-tag';
-      tag.textContent = '⛨ localhost';
-      tag.title = 'Save/Open write to a “saved” folder on THIS computer, not the cloud.';
-      actions.appendChild(tag);
-      actions.appendChild(iconButton('⤓', 'Export a .json file (to share or back up)', () => this.handlers.exportFile()));
-      actions.appendChild(iconButton('⤒', 'Import a .json file', () => this.handlers.importFile()));
+      open.title = 'Open a world saved on your computer';
+      const imp = button('Import', '', () => this.handlers.importFile());
+      imp.title = 'Load a .json world file — e.g. one you downloaded earlier';
+      const exp = button('Export', '', () => this.handlers.exportFile());
+      exp.title = 'Download this world as a .json file (to share or back up)';
+      actions.append(save, open, sep(), imp, exp);
     } else {
-      actions.appendChild(button('Save', '', () => this.handlers.save()));
-      actions.appendChild(button('Load', '', () => this.handlers.load()));
+      const save = button('Save', '', () => this.handlers.save());
+      save.title = 'Download this world as a .json file';
+      const open = button('Open', '', () => this.handlers.load());
+      open.title = 'Open a .json world file';
+      actions.append(save, open);
     }
     actions.appendChild(button('New', '', () => this.handlers.newPalace()));
     const review = button('Review ▸', '', () => this.handlers.startReview());
@@ -252,7 +252,13 @@ export class EditorPanel {
     this.root.appendChild(header);
 
     const autosave = div('editor-autosave');
-    autosave.textContent = '✓ Autosaves to this browser as you work · Save exports a .json backup';
+    if (this.serverOnline) {
+      autosave.innerHTML =
+        '✓ Autosaves as you work. <b>Save</b> / <b>Open</b> keep worlds on your computer; <b>Import</b> / <b>Export</b> use .json files. ' +
+        'Have a .json from before? <b>Import</b> it, then <b>Save</b>.';
+    } else {
+      autosave.textContent = '✓ Autosaves to this browser as you work · Save / Open use .json files';
+    }
     this.root.appendChild(autosave);
 
     // --- How-to hint -----------------------------------------------------------
@@ -995,6 +1001,11 @@ function div(className: string): HTMLElement {
   const el = document.createElement('div');
   el.className = className;
   return el;
+}
+
+/** A thin vertical divider to group related header buttons. */
+function sep(): HTMLElement {
+  return div('editor-sep');
 }
 
 /** A filesystem-safe base name for a locus's exported asset. */
