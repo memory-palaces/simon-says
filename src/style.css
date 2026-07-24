@@ -553,6 +553,16 @@ canvas {
   align-items: center;
   gap: 2px;
 }
+.server-tag {
+  font-size: 11px;
+  color: #8fd0a0;
+  background: rgba(143, 208, 160, 0.14);
+  border: 1px solid rgba(143, 208, 160, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  cursor: default;
+}
 .prop-badge {
   font-size: 10px;
   text-transform: uppercase;

@@ -74,14 +74,13 @@ export class SettingsDialog {
     (falKey.input as HTMLInputElement).type = 'password';
     (falKey.input as HTMLInputElement).autocomplete = 'off';
     falKey.input.value = config.fal?.apiKey ?? '';
-    const falModel = field('fal.ai model', DEFAULT_FAL_MODEL);
-    falModel.input.value = config.fal?.model ?? DEFAULT_FAL_MODEL;
-    const saveFal = () => this.handlers.setFalConfig((falKey.input as HTMLInputElement).value, (falModel.input as HTMLInputElement).value);
+    // The model is chosen per-world on the sidebar, so only the key lives here; keep
+    // whatever model was already set when saving the key.
+    const saveFal = () => this.handlers.setFalConfig((falKey.input as HTMLInputElement).value, config.fal?.model ?? DEFAULT_FAL_MODEL);
     falKey.input.oninput = saveFal;
-    falModel.input.oninput = saveFal;
-    wrap.append(falKey.el, falModel.el);
+    wrap.append(falKey.el);
     const falHint = div('settings-hint');
-    falHint.innerHTML = 'Key from <code>fal.ai/dashboard/keys</code>. Stored in this browser; sent only to fal.ai.';
+    falHint.innerHTML = 'Key from <code>fal.ai/dashboard/keys</code>. Stored in this browser; sent only to fal.ai. Pick the model per world on the sidebar.';
     wrap.appendChild(falHint);
 
     // Local ComfyUI

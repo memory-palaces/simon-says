@@ -7,6 +7,7 @@ import { Overlay } from './ui/overlay';
 import { EditorPanel } from './ui/editorPanel';
 import { ReviewOverlay } from './ui/review';
 import { openPalace, readPalaceFile, savePalace } from './model/persistence';
+import { listServerPalaces, loadServerPalace, saveServerPalace, serverAvailable } from './model/server';
 import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
@@ -114,6 +115,10 @@ class App {
   private savedClean = true;
   /** The file this palace is bound to (File System Access), so Save writes back to it. */
   private fileHandle: FileSystemFileHandle | null = null;
+  /** Whether the local dev-server save/open API is reachable. */
+  private serverOnline = false;
+  /** The server filename this palace is bound to, so Save overwrites it. */
+  private serverName: string | null = null;
 
   private readonly history = new History<Palace>(100);
   private histTimer = 0;
@@ -132,8 +137,10 @@ class App {
         this.checkpointSoon();
       },
       enterWalk: () => this.enterWalk(),
-      save: () => this.save(),
-      load: () => this.loadViaPicker(),
+      save: () => this.saveSmart(),
+      load: () => this.openSmart(),
+      exportFile: () => this.save(true),
+      importFile: () => this.loadViaPicker(),
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
       openSettings: () => this.settingsDialog.open(this.genConfig()),
@@ -236,6 +243,14 @@ class App {
   }
 
   private async boot(): Promise<void> {
+    // Detect the local save/open server (present when run via the dev server) so
+    // Save/Open write straight to disk instead of downloading a file each time.
+    void serverAvailable().then((online) => {
+      this.serverOnline = online;
+      this.editor.setServerOnline(online);
+      if (this.mode === 'edit') this.renderEditor();
+    });
+
     // Restore an autosaved draft if one exists — never make the user start over
     // because of a refresh or crash.
     const draft = await loadDraft();
@@ -306,6 +321,68 @@ class App {
   }
 
   /** Save back to the bound file (or Save As the first time). Ctrl+S. */
+  /** Primary Save: to the local server when it's running, else to a file. */
+  private async saveSmart(): Promise<void> {
+    if (this.serverOnline) return this.saveToServer();
+    return this.save();
+  }
+
+  /** Primary Open: from the local server when it's running, else a file picker. */
+  private async openSmart(): Promise<void> {
+    if (this.serverOnline) return this.openFromServer();
+    return this.loadViaPicker();
+  }
+
+  private async saveToServer(): Promise<void> {
+    const name = this.serverName ?? sanitizeName(this.root.name);
+    try {
+      await saveServerPalace(name, this.root);
+      this.serverName = name;
+      this.savedClean = true;
+      this.toasts.success(`Saved “${this.root.name}” on localhost (${name}.json)`);
+    } catch (err) {
+      console.error(err);
+      this.toasts.error('Could not save to localhost.');
+    }
+  }
+
+  private async openFromServer(): Promise<void> {
+    if (!(await this.confirmDiscard('Open a saved world?'))) return;
+    let items;
+    try {
+      items = await listServerPalaces();
+    } catch (err) {
+      console.error(err);
+      this.toasts.error('Could not reach localhost.');
+      return;
+    }
+    if (items.length === 0) {
+      this.toasts.info('No worlds saved on localhost yet — use Save first.');
+      return;
+    }
+    items.sort((a, b) => b.mtime - a.mtime);
+    const choice = await chooseAction(this.mount, {
+      title: 'Open from localhost',
+      message: 'Worlds saved on this computer:',
+      choices: [
+        ...items.map((it) => ({ id: it.name, label: it.name, sublabel: `${relTime(it.mtime)} · ${Math.round(it.size / 1024)} KB` })),
+        { id: '__cancel', label: 'Cancel' },
+      ],
+    });
+    if (!choice || choice === '__cancel') return;
+    try {
+      const palace = await loadServerPalace(choice);
+      this.fileHandle = null;
+      this.serverName = choice;
+      await this.adoptPalace(palace);
+      this.toasts.success(`Opened “${palace.name}”`);
+    } catch (err) {
+      console.error(err);
+      this.toasts.error('Could not open that world.');
+    }
+  }
+
+  /** Explicit file export (Save As / download), independent of the server. */
   private async save(forceNew = false): Promise<void> {
     const outcome = await savePalace(this.root, forceNew ? null : this.fileHandle);
     if (outcome.status === 'cancelled') return;
@@ -327,13 +404,13 @@ class App {
       title,
       message: `You have unsaved changes in “${this.palace.name}”.`,
       choices: [
-        { id: 'save', label: 'Save, then continue', sublabel: 'Exports a .json first', variant: 'primary' },
+        { id: 'save', label: 'Save, then continue', sublabel: this.serverOnline ? 'Saves to localhost first' : 'Exports a .json first', variant: 'primary' },
         { id: 'discard', label: 'Continue without saving' },
         { id: 'cancel', label: 'Cancel' },
       ],
     });
     if (choice === null || choice === 'cancel') return false;
-    if (choice === 'save') await this.save();
+    if (choice === 'save') await this.saveSmart();
     return true;
   }
 
@@ -1371,6 +1448,7 @@ class App {
     this.root = this.palace;
     this.navStack = [];
     this.fileHandle = null;
+    this.serverName = null; // a fresh world isn't bound to a saved file yet
     setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
     this.editor.setNotice(null); // clear any stale "drag the geometry" message
@@ -1760,6 +1838,7 @@ class App {
     try {
       const palace = await readPalaceFile(file);
       this.fileHandle = null; // a dropped file isn't writable; Save will Save As
+      this.serverName = null;
       await this.adoptPalace(palace);
     } catch (err) {
       console.error(err);
@@ -1773,6 +1852,7 @@ class App {
       const opened = await openPalace();
       if (opened) {
         this.fileHandle = opened.handle; // save writes back to this file
+        this.serverName = null; // opened from a file, not the server
         await this.adoptPalace(opened.palace);
       }
     } catch (err) {
@@ -1849,6 +1929,22 @@ function pickFile(accept: string): Promise<File | null> {
 function snippet(text: string): string {
   const t = text.trim().replace(/\s+/g, ' ');
   return t.length > 40 ? `${t.slice(0, 40)}…` : t;
+}
+
+/** A filesystem-safe base name for a server palace file. */
+function sanitizeName(name: string): string {
+  return name.trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'palace';
+}
+
+/** A short "3 min ago" style label for a save timestamp (ms). */
+function relTime(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
 }
 
 new App();

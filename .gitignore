@@ -4,6 +4,9 @@ dist/
 .DS_Store
 .vite/
 
+# Palaces saved to this machine via the local dev-server API (see vite.config.ts).
+/saved/
+
 # Fetched sample spaces are optional and large (Sponza alone is ~50 MB). They're
 # pulled on demand via `npm run fetch-samples`, so keep them out of git. Only the
 # small default sample (virtualcity/) is tracked so a fresh clone renders instantly.

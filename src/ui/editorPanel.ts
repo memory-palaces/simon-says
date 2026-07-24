@@ -15,6 +15,8 @@ export interface EditorHandlers {
   enterWalk(): void;
   save(): void;
   load(): void;
+  exportFile(): void;
+  importFile(): void;
   newPalace(): void;
   startReview(): void;
   openSettings(): void;
@@ -98,6 +100,9 @@ export class EditorPanel {
   /** A transient banner (e.g. "drop this palace's .glb"). Persists across renders. */
   private notice: string | null = null;
 
+  /** Whether the local save/open server is available (drives the header buttons). */
+  private serverOnline = false;
+
   /** Nesting depth + breadcrumb trail, for the Return bar. */
   private nesting: { depth: number; trail: string[] } = { depth: 0, trail: [] };
 
@@ -136,6 +141,10 @@ export class EditorPanel {
 
   setNesting(depth: number, trail: string[]): void {
     this.nesting = { depth, trail };
+  }
+
+  setServerOnline(online: boolean): void {
+    this.serverOnline = online;
   }
 
   setGeneration(gen: GenState): void {
@@ -180,8 +189,24 @@ export class EditorPanel {
 
     const actions = div('editor-actions');
     actions.appendChild(button('▶ Enter', 'primary', () => this.handlers.enterWalk()));
-    actions.appendChild(button('Save', '', () => this.handlers.save()));
-    actions.appendChild(button('Load', '', () => this.handlers.load()));
+    if (this.serverOnline) {
+      // Real save/open to this machine; file .json becomes explicit Export/Import.
+      const save = button('Save', '', () => this.handlers.save());
+      save.title = 'Save to this computer (the localhost dev server) — nothing is uploaded';
+      const open = button('Open', '', () => this.handlers.load());
+      open.title = 'Open a world saved on this computer';
+      actions.append(save, open);
+      const tag = document.createElement('span');
+      tag.className = 'server-tag';
+      tag.textContent = '⛨ localhost';
+      tag.title = 'Save/Open write to a “saved” folder on THIS computer, not the cloud.';
+      actions.appendChild(tag);
+      actions.appendChild(iconButton('⤓', 'Export a .json file (to share or back up)', () => this.handlers.exportFile()));
+      actions.appendChild(iconButton('⤒', 'Import a .json file', () => this.handlers.importFile()));
+    } else {
+      actions.appendChild(button('Save', '', () => this.handlers.save()));
+      actions.appendChild(button('Load', '', () => this.handlers.load()));
+    }
     actions.appendChild(button('New', '', () => this.handlers.newPalace()));
     const review = button('Review ▸', '', () => this.handlers.startReview());
     review.disabled = palace.loci.length === 0;
@@ -348,15 +373,17 @@ export class EditorPanel {
         thumb.className = 'prop-thumb';
         thumb.src = d.src;
         card.appendChild(thumb);
-        if (this.gen.can3d) {
-          const row3d = div('locus-gen-row');
-          row3d.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeDecor3d(d.id)));
-          card.appendChild(row3d);
-        }
+        const row2 = div('locus-gen-row');
+        if (this.gen.can3d) row2.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeDecor3d(d.id)));
+        row2.appendChild(iconButton('⬇', 'download image', () => downloadAsset(d.src!, `decor-${d.id}`)));
+        card.appendChild(row2);
       } else if (d.kind === 'mesh' && d.src) {
         const holder = div('prop-mesh-preview');
         this.handlers.mountMeshPreview(holder, d.src);
         card.appendChild(holder);
+        const row2 = div('locus-gen-row');
+        row2.appendChild(iconButton('⬇', 'download 3D model', () => downloadAsset(d.src!, `decor-${d.id}`)));
+        card.appendChild(row2);
       }
     }
 
@@ -628,16 +655,18 @@ export class EditorPanel {
         thumb.className = 'prop-thumb';
         thumb.src = prop.src;
         card.appendChild(thumb);
+        const row2 = div('locus-gen-row');
         // Upgrade the billboard to a real 3D object (gated on 2D + a can-3D pipeline).
-        if (this.gen.can3d) {
-          const row3d = div('locus-gen-row');
-          row3d.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeProp3d(locus.id, prop.id)));
-          card.appendChild(row3d);
-        }
+        if (this.gen.can3d) row2.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeProp3d(locus.id, prop.id)));
+        row2.appendChild(iconButton('⬇', 'download image', () => downloadAsset(prop.src!, `prop-${prop.id}`)));
+        card.appendChild(row2);
       } else if (prop.kind === 'mesh' && prop.src) {
         const holder = div('prop-mesh-preview');
         this.handlers.mountMeshPreview(holder, prop.src);
         card.appendChild(holder);
+        const row2 = div('locus-gen-row');
+        row2.appendChild(iconButton('⬇', 'download 3D model', () => downloadAsset(prop.src!, `prop-${prop.id}`)));
+        card.appendChild(row2);
       }
     }
 
@@ -699,6 +728,7 @@ export class EditorPanel {
     const row = div('locus-gen-row');
     row.appendChild(button(locus.image_2d ? '↻ Regenerate' : '✦ Render image', '', () => this.handlers.generate(locus.id)));
     if (locus.image_2d) {
+      row.appendChild(iconButton('⬇', 'download image', () => downloadAsset(locus.image_2d!, assetName(locus, 'image'))));
       row.appendChild(iconButton('🗑', 'remove image', () => this.handlers.clearImage(locus.id)));
     }
     wrap.appendChild(row);
@@ -720,6 +750,7 @@ export class EditorPanel {
         const tag = div('locus-gen-hint');
         tag.textContent = '3D mesh ✓';
         row.appendChild(tag);
+        row.appendChild(iconButton('⬇', 'download 3D model', () => downloadAsset(locus.mesh_3d!, assetName(locus, 'mesh'))));
         row.appendChild(iconButton('🗑', 'remove 3D', () => this.handlers.clearMesh(locus.id)));
       }
       wrap.appendChild(row);
@@ -862,6 +893,33 @@ function div(className: string): HTMLElement {
   const el = document.createElement('div');
   el.className = className;
   return el;
+}
+
+/** A filesystem-safe base name for a locus's exported asset. */
+function assetName(locus: Locus, kind: 'image' | 'mesh'): string {
+  const base = (locus.label || `locus-${locus.order}`).trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'asset';
+  return `${base}-${kind}`;
+}
+
+/** Pick a file extension from a data URL's mime type. */
+function assetExt(src: string): string {
+  const mime = /^data:([^;,]+)/.exec(src)?.[1] ?? '';
+  if (mime.includes('png')) return 'png';
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+  if (mime.includes('webp')) return 'webp';
+  if (mime.includes('gltf-binary') || mime.includes('glb')) return 'glb';
+  if (mime.includes('gltf')) return 'gltf';
+  return 'bin';
+}
+
+/** Download an embedded image/mesh (a data URL) as a real file. */
+function downloadAsset(src: string, baseName: string): void {
+  const a = document.createElement('a');
+  a.href = src;
+  a.download = `${baseName}.${assetExt(src)}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /**
