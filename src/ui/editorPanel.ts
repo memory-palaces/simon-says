@@ -1,5 +1,6 @@
 import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Decor, type Locus, type Palace, type Portal, type SceneProp } from '../model/palace';
 import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
+import { downloadAsset } from './download';
 
 interface GenState {
   options: Array<{ id: string; label: string }>;
@@ -17,6 +18,7 @@ export interface EditorHandlers {
   load(): void;
   exportFile(): void;
   importFile(): void;
+  openAssets(): void;
   newPalace(): void;
   startReview(): void;
   openSettings(): void;
@@ -221,6 +223,10 @@ export class EditorPanel {
     const review = button('Review ▸', '', () => this.handlers.startReview());
     review.disabled = palace.loci.length === 0;
     actions.appendChild(review);
+
+    const assets = button('🗂 Assets', '', () => this.handlers.openAssets());
+    assets.title = 'See and reuse every image / 3D model in this world';
+    actions.appendChild(assets);
 
     const recenter = button('⌖ Recenter', '', () => this.handlers.recenter());
     recenter.title = 'Drop back onto the floor (R)';
@@ -995,27 +1001,6 @@ function div(className: string): HTMLElement {
 function assetName(locus: Locus, kind: 'image' | 'mesh'): string {
   const base = (locus.label || `locus-${locus.order}`).trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'asset';
   return `${base}-${kind}`;
-}
-
-/** Pick a file extension from a data URL's mime type. */
-function assetExt(src: string): string {
-  const mime = /^data:([^;,]+)/.exec(src)?.[1] ?? '';
-  if (mime.includes('png')) return 'png';
-  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
-  if (mime.includes('webp')) return 'webp';
-  if (mime.includes('gltf-binary') || mime.includes('glb')) return 'glb';
-  if (mime.includes('gltf')) return 'gltf';
-  return 'bin';
-}
-
-/** Download an embedded image/mesh (a data URL) as a real file. */
-function downloadAsset(src: string, baseName: string): void {
-  const a = document.createElement('a');
-  a.href = src;
-  a.download = `${baseName}.${assetExt(src)}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
 
 /**

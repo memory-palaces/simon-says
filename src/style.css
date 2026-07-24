@@ -563,6 +563,80 @@ canvas {
   white-space: nowrap;
   cursor: default;
 }
+
+/* Assets library modal. */
+.asset-card {
+  width: min(760px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.asset-count {
+  font-size: 12px;
+  color: var(--ui-dim);
+  font-weight: 400;
+}
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.asset-cell {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.asset-preview {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.asset-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.asset-3d {
+  font-size: 22px;
+  font-weight: 800;
+  color: #c9adff;
+  letter-spacing: 1px;
+}
+.asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.asset-label {
+  font-size: 12px;
+  color: var(--ui-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asset-uses {
+  font-size: 11px;
+  color: var(--ui-dim);
+}
+.asset-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.asset-actions .btn {
+  flex: 1;
+}
 .prop-badge {
   font-size: 10px;
   text-transform: uppercase;

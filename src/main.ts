@@ -8,6 +8,8 @@ import { EditorPanel } from './ui/editorPanel';
 import { ReviewOverlay } from './ui/review';
 import { openPalace, readPalaceFile, savePalace } from './model/persistence';
 import { listServerPalaces, loadServerPalace, saveServerPalace, serverAvailable } from './model/server';
+import { collectAssets, type AssetRef } from './model/assets';
+import { openAssetManager } from './ui/assetManager';
 import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
@@ -143,6 +145,7 @@ class App {
       load: () => this.openSmart(),
       exportFile: () => this.save(true),
       importFile: () => this.loadViaPicker(),
+      openAssets: () => this.openAssets(),
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
       openSettings: () => this.settingsDialog.open(this.genConfig()),
@@ -1216,9 +1219,8 @@ class App {
     return this.palace.decor?.find((d) => d.id === id);
   }
 
-  private addDecor(kind: 'text' | 'image' | 'mesh'): void {
-    // Seed it where you're looking (or a few metres ahead if nothing's in view),
-    // then let the user refine with 📍.
+  /** Asset-local anchor where you're looking (or a few metres ahead), for seeding decor. */
+  private viewSeedLocal(): { position: Vec3; normal: Vec3 } {
     const hit = this.viewer.raycastSurface();
     let point: THREE.Vector3;
     let normal: THREE.Vector3;
@@ -1230,8 +1232,12 @@ class App {
       point = this.viewer.camera.position.clone().addScaledVector(this.scratchA, 3);
       normal = this.scratchA.clone().multiplyScalar(-1);
     }
-    const local = this.loci.worldToLocal(DEFAULT_ASSET_ID, point, normal);
-    addDecor(this.palace, kind, local.position, local.normal);
+    return this.loci.worldToLocal(DEFAULT_ASSET_ID, point, normal);
+  }
+
+  private addDecor(kind: 'text' | 'image' | 'mesh'): void {
+    const seed = this.viewSeedLocal();
+    addDecor(this.palace, kind, seed.position, seed.normal);
     this.loci.sync(this.palace);
     this.checkpoint();
     this.renderEditor();
@@ -1451,6 +1457,68 @@ class App {
       p.rotation = p.rotation ?? [0, 0, 0];
       addPropAttachment(p, { type: 'mesh', src: glb });
     });
+  }
+
+  // --- Assets library --------------------------------------------------------
+
+  private openAssets(): void {
+    const items = collectAssets(this.palace);
+    if (items.length === 0) {
+      this.toasts.info('No images or 3D models yet — render or attach some first.');
+      return;
+    }
+    if (this.viewer.fp.locked) this.viewer.fp.controls.unlock();
+    openAssetManager(this.mount, items, { onAttach: (a) => void this.attachAssetTo(a) });
+  }
+
+  /** Reuse an existing asset by attaching it to another element. */
+  private async attachAssetTo(a: AssetRef): Promise<void> {
+    const choice = await chooseAction(this.mount, {
+      title: 'Attach asset to…',
+      message: 'Reuse this asset on another element (a copy is placed — the original stays put):',
+      choices: [
+        { id: 'decor', label: 'New decor', sublabel: 'ambiance, placed anywhere' },
+        ...lociInOrder(this.palace).map((l) => ({
+          id: `locus:${l.id}`,
+          label: `Locus ${l.order}${l.label ? ` — ${l.label}` : ''}`,
+          sublabel: 'add as a scene prop',
+        })),
+        ...(this.palace.portals ?? []).map((p) => ({
+          id: `portal:${p.id}`,
+          label: `Portal ${p.label || '(unnamed)'}`,
+          sublabel: 'use as its doorway visual',
+        })),
+        { id: '__cancel', label: 'Cancel' },
+      ],
+    });
+    if (!choice || choice === '__cancel') return;
+
+    if (choice === 'decor') {
+      const seed = this.viewSeedLocal();
+      const d = addDecor(this.palace, a.type, seed.position, seed.normal);
+      d.src = a.src;
+      addPropAttachment(d, { type: a.type, src: a.src });
+      this.toasts.success('Added as decor — use 📍 to place it.');
+    } else if (choice.startsWith('locus:')) {
+      const locus = this.palace.loci.find((l) => l.id === choice.slice('locus:'.length));
+      if (locus) {
+        const p = addProp(locus, a.type);
+        p.src = a.src;
+        addPropAttachment(p, { type: a.type, src: a.src });
+        this.toasts.success(`Added as a prop on Locus ${locus.order}.`);
+      }
+    } else if (choice.startsWith('portal:')) {
+      const p = this.findPortal(choice.slice('portal:'.length));
+      if (p) {
+        p.kind = a.type;
+        p.src = a.src;
+        addPropAttachment(p, { type: a.type, src: a.src });
+        this.toasts.success('Set as the portal visual.');
+      }
+    }
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
   }
 
   private clearImage(id: string): void {
