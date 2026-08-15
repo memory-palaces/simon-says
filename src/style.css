@@ -451,13 +451,13 @@ canvas {
   color: var(--ui-fg);
 }
 /* Docked, non-blocking controls reference (toggled with '?'). Never captures the
-   pointer, so you can keep it up while navigating. */
+   pointer, so you can keep it up while navigating. Bottom-LEFT: the editor panel
+   owns the right side, and the HUD line sits just below at left/bottom. */
 .help-panel {
   position: fixed;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  max-height: 88vh;
+  left: 12px;
+  bottom: 34px; /* clear of the HUD readout */
+  max-height: calc(100vh - 60px);
   overflow-y: auto;
   pointer-events: none;
   z-index: 40;

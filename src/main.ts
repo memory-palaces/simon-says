@@ -104,6 +104,9 @@ const SAMPLE_SPACES: SampleSpace[] = [
 
 const DEFAULT_SPACE = { ...SAMPLE_SPACES[0], name: "Simon's Street (sample)" };
 
+/** Duration of the bird's-eye zoom out / back (ms). */
+const OVERVIEW_MS = 650;
+
 type Mode = 'edit' | 'walk' | 'review';
 
 class App {
@@ -148,6 +151,8 @@ class App {
   private targetedId: string | null = null;
   private targetedDecorId: string | null = null;
   private movingId: string | null = null;
+  /** Bird's-eye view: the pose we'll glide back to, and whether we're up there. */
+  private overview: { pose: { position: THREE.Vector3; quaternion: THREE.Quaternion }; wasFlying: boolean } | null = null;
   /** A scene prop being placed/moved in-world by aiming at a surface. */
   private placingProp: { locusId: string; propId: string; savedOffset: Vec3 } | null = null;
   /** A free-standing decor item being placed/moved in-world by aiming. */
@@ -662,6 +667,7 @@ class App {
   private wireEvents(): void {
     this.viewer.fp.controls.addEventListener('lock', () => this.setMode('walk'));
     this.viewer.fp.controls.addEventListener('unlock', () => {
+      if (this.overview) this.exitOverview(); // Esc leaves the bird's-eye view first
       if (this.placingProp) this.cancelPropPlacement(); // Esc/right-click aborts a prop placement
       if (this.placingDecor) this.cancelDecorPlacement();
       if (this.mode === 'walk') this.setMode('edit');
@@ -670,7 +676,13 @@ class App {
     const canvas = this.viewer.renderer.domElement;
     // Click the 3D view to start walking; while walking, click a marker you're
     // looking at — a doorway pin enters its inner palace, otherwise open its editor.
-    canvas.addEventListener('click', () => {
+    canvas.addEventListener('click', (e) => {
+      // In bird's-eye view a click is "take me there", not "start walking".
+      if (this.overview) {
+        const hit = this.viewer.raycastScreen(e.clientX, e.clientY);
+        this.exitOverview(hit?.point);
+        return;
+      }
       if (this.mode === 'edit') this.enterWalk();
       else if (this.placingProp) this.finishPropPlacement();
       else if (this.placingDecor) this.finishDecorPlacement();
@@ -836,6 +848,15 @@ class App {
     if (e.key === '?') {
       e.preventDefault();
       this.helpOverlay.toggle();
+      return;
+    }
+
+    // 'V' toggles the bird's-eye view of the whole world.
+    const vt = e.target as HTMLElement | null;
+    const vTyping = !!vt && (vt.tagName === 'INPUT' || vt.tagName === 'TEXTAREA');
+    if (!vTyping && (e.key === 'v' || e.key === 'V')) {
+      e.preventDefault();
+      this.toggleOverview();
       return;
     }
 
@@ -1045,6 +1066,53 @@ class App {
     this.loci.sync(this.palace);
     this.markDirty();
     this.checkpointSoon();
+  }
+
+  /**
+   * Bird's-eye view (V): glide up to a top-down shot of the whole world, then back
+   * to exactly where you were. Physics is untouched — we just fly the camera and
+   * park movement while you're up there (a click drops you at the spot you picked).
+   */
+  private toggleOverview(): void {
+    if (this.overview) {
+      this.exitOverview();
+      return;
+    }
+    // The editor panel covers the right of the canvas in edit mode; frame the world
+    // in what's actually visible.
+    const panel = this.mode === 'edit' ? document.querySelector('.editor') : null;
+    const covered = panel ? panel.getBoundingClientRect().width : 0;
+    const pose = this.viewer.overviewPose(covered);
+    if (!pose) {
+      this.toasts.info('Load a model first.');
+      return;
+    }
+    this.overview = { pose: this.viewer.cameraPose(), wasFlying: this.viewer.fp.mode === 'fly' };
+    this.viewer.fp.setFlying(true); // no gravity while we're above the world
+    this.viewer.flyTo(pose.position, pose.lookAt, OVERVIEW_MS);
+    this.overlay.setCrosshair(false);
+    this.overlay.setHud('Bird’s-eye view — click to go there · V to return');
+  }
+
+  /** Return to where we were before the overview (or to `to`, if a spot was clicked). */
+  private exitOverview(to?: THREE.Vector3): void {
+    const state = this.overview;
+    if (!state) return;
+    this.overview = null;
+    if (to) {
+      const eye = to.clone().setY(to.y + this.viewer.fp.eyeOffset);
+      // Look the way we were facing before, from the new spot.
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(state.pose.quaternion);
+      forward.y = 0;
+      if (forward.lengthSq() < 1e-4) forward.set(0, 0, -1);
+      this.viewer.flyTo(eye, eye.clone().add(forward.normalize()), OVERVIEW_MS);
+      window.setTimeout(() => this.viewer.fp.setFlying(false), OVERVIEW_MS + 30); // land on the floor
+    } else {
+      this.viewer.flyToPose(state.pose, OVERVIEW_MS);
+      if (!state.wasFlying) window.setTimeout(() => this.viewer.fp.setFlying(false), OVERVIEW_MS + 30);
+    }
+    this.overlay.setCrosshair(this.mode === 'walk');
+    this.overlay.setHud('');
   }
 
   private toggleScaleFigure(): void {

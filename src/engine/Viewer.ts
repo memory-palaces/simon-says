@@ -215,6 +215,82 @@ export class Viewer {
     return assetId === DEFAULT_ASSET_ID ? this.currentModel : null;
   };
 
+  /**
+   * A top-down pose that frames the whole model: high enough that its longest side
+   * fits the viewport, looking straight down (tilted a hair so it isn't a degenerate
+   * lookAt). Returns null when there's no model.
+   */
+  overviewPose(coveredRightPx = 0): { position: THREE.Vector3; lookAt: THREE.Vector3 } | null {
+    if (!this.currentModel) return null;
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const centre = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    // Fit into the part of the canvas the editor panel doesn't cover.
+    const vw = this.renderer.domElement.clientWidth || 1;
+    const visibleW = Math.max(120, vw - coveredRightPx);
+    const visibleAspect = visibleW / (this.renderer.domElement.clientHeight || 1);
+    const halfFov = (this.camera.fov * Math.PI) / 360;
+    const need = Math.max(size.z, size.x / visibleAspect) / 2;
+    const height = Math.max(6, (need / Math.tan(halfFov)) * 1.1);
+
+    // Not straight down: looking down from slightly south keeps north up (a pure
+    // top-down lookAt has no well-defined roll) and reads as a 3D world, not a map.
+    const back = height * 0.28;
+    // Slide the whole shot right so the world lands in the middle of the VISIBLE
+    // area rather than behind the panel.
+    const worldPerPx = (2 * height * Math.tan(halfFov) * this.camera.aspect) / vw;
+    const shiftX = (coveredRightPx / 2) * worldPerPx;
+    return {
+      position: new THREE.Vector3(centre.x + shiftX, box.max.y + height, centre.z + back),
+      lookAt: new THREE.Vector3(centre.x + shiftX, box.min.y, centre.z),
+    };
+  }
+
+  /** Raycast through a screen point (CSS pixels) onto the geometry. */
+  raycastScreen(clientX: number, clientY: number): SurfaceHit | null {
+    if (!this.currentModel) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.pickRay.setFromCamera(ndc, this.camera);
+    const hits = this.pickRay.intersectObject(this.currentModel, true);
+    if (hits.length === 0) return null;
+    const hit = hits[0];
+    const normal = new THREE.Vector3(0, 1, 0);
+    if (hit.face) {
+      this.normalMat.getNormalMatrix(hit.object.matrixWorld);
+      normal.copy(hit.face.normal).applyNormalMatrix(this.normalMat).normalize();
+    }
+    return { point: hit.point.clone(), normal };
+  }
+
+  /** Current camera pose, for restoring after a scripted detour (e.g. overview). */
+  cameraPose(): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+    return { position: this.camera.position.clone(), quaternion: this.camera.quaternion.clone() };
+  }
+
+  /** Glide back to a pose captured by cameraPose(). */
+  flyToPose(pose: { position: THREE.Vector3; quaternion: THREE.Quaternion }, durationMs: number): void {
+    if (durationMs <= 0) {
+      this.camera.position.copy(pose.position);
+      this.camera.quaternion.copy(pose.quaternion);
+      this.fp.teleport(this.camera.position.clone());
+      return;
+    }
+    this.trans = {
+      fromP: this.camera.position.clone(),
+      toP: pose.position.clone(),
+      fromQ: this.camera.quaternion.clone(),
+      toQ: pose.quaternion.clone(),
+      t: 0,
+      dur: durationMs / 1000,
+    };
+    this.fp.teleport(this.camera.position.clone());
+  }
+
   /** Raycast forward from the crosshair (screen centre) onto the geometry. */
   raycastSurface(): SurfaceHit | null {
     if (!this.currentModel) return null;

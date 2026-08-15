@@ -100,8 +100,9 @@ the same space). Drag a saved `.json` to load a palace. See
 | Look | mouse |
 | Run | `Shift` |
 | Jump | `Space` |
-| Fly / no-clip (through walls) | `F` — then `Space` / `C` for up / down |
+| Fly / no-clip (through walls) | `F` — then `Space` / `C` for up / down. Press `F` while up in the air and you fall. |
 | Recenter on the floor | `R` (or the ⌖ button) |
+| Bird's-eye view of the whole world | `V` — click a spot up there to go straight to it |
 | Drop / delete / move a locus | `T` / `B` / `G` |
 | Drop a portal / go through it | `P` / `Enter` (aim at it) · `Q` returns |
 | World map / full cheat-sheet | `M` / `?` |

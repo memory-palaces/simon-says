@@ -17,7 +17,7 @@ export class HelpOverlay {
         <span>Look around</span><span>mouse <em>(right-click / Esc releases)</em></span>
         <span>Run</span><span>Shift</span>
         <span>Jump</span><span>Space</span>
-        <span>Fly ⇄ walk</span><span>F <em>(fly = pass through walls)</em></span>
+        <span>Fly ⇄ walk</span><span>F <em>(fly = through walls; F in the air = fall)</em></span>
         <span>Fly up / down</span><span>Space / C</span>
         <span>Zoom (dolly)</span><span>mouse wheel or { / }</span>
         <span>Recenter on #1</span><span>R</span>
@@ -32,6 +32,7 @@ export class HelpOverlay {
         <span>Go to a locus / portal</span><span>Ctrl/Cmd+G</span>
         <span>Undo / redo</span><span>Ctrl/Cmd+Z / +Shift+Z</span>
         <span>Save</span><span>Ctrl/Cmd+S</span>
+        <span>Bird’s-eye view</span><span>V <em>(click a spot to go there)</em></span>
         <span>World map</span><span>M</span>
         <span>This help</span><span>?</span>
       </div>`;

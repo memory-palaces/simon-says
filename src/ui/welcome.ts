@@ -76,6 +76,7 @@ export class WelcomeDialog {
           <span>Move / look</span><span><kbd>W A S D</kbd> + mouse · <kbd>Shift</kbd> run</span>
           <span>Drop a locus</span><span><kbd>T</kbd> <em>(aim first)</em></span>
           <span>Fly through walls</span><span><kbd>F</kbd> · <kbd>Space</kbd>/<kbd>C</kbd> up/down</span>
+          <span>See the whole world</span><span><kbd>V</kbd> <em>(bird’s-eye; click a spot to go there)</em></span>
           <span>Recenter on locus #1</span><span><kbd>R</kbd></span>
           <span>Save</span><span><kbd>Ctrl/Cmd</kbd>+<kbd>S</kbd></span>
           <span>Every other key</span><span><kbd>?</kbd> shows the full cheat-sheet</span>

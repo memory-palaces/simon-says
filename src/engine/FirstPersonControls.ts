@@ -104,9 +104,17 @@ export class FirstPersonControls {
     return this.flying ? 'fly' : 'walk';
   }
 
-  setFlying(on: boolean): void {
+  /**
+   * Switch between fly and walk.
+   *
+   * `snap` (the default) lands you on the floor directly below — right for scripted
+   * moves like spawning or leaving the bird's-eye view. With `snap: false` you just
+   * become subject to gravity where you are: pressing F while up in the air drops
+   * you out of the sky, which is both more fun and more honest about where you were.
+   */
+  setFlying(on: boolean, { snap = true }: { snap?: boolean } = {}): void {
     this.velocityY = 0;
-    if (!on && this.colliders.length > 0) {
+    if (!on && snap && this.colliders.length > 0) {
       // Entering walk: snap onto the floor directly below so we don't free-fall
       // from fly height (that's the "shooting off the platform" feeling). Use the
       // actual geometry under our current X/Z — never assume the model sits at the
@@ -281,7 +289,8 @@ export class FirstPersonControls {
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (e.code === 'KeyF') {
-      this.setFlying(!this.flying); // snaps to the floor when entering walk
+      // No snapping here: F in mid-air means "stop flying" — so you fall.
+      this.setFlying(!this.flying, { snap: false });
       return;
     }
     this.keys.add(e.code);

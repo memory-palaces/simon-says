@@ -127,12 +127,13 @@ export class SettingsDialog {
       <span>Jump</span><span>Space</span>
       <span>Fly / no-clip</span><span>F <em>(fly = pass through walls)</em></span>
       <span>Fly up / down</span><span>Space / C</span>
-      <span>Fly ⇄ walk (gravity)</span><span>F</span>
+      <span>Fly ⇄ walk (gravity)</span><span>F <em>(pressed mid-air, you drop)</em></span>
       <span>Drop a locus</span><span>T</span>
       <span>Delete / move locus</span><span>B / G <em>(aim at a marker)</em></span>
       <span>Recenter on floor</span><span>R</span>
       <span>X-ray (all pins through walls)</span><span>X</span>
       <span>Show controls help</span><span>?</span>
+      <span>Bird’s-eye view</span><span>V <em>(click a spot to go there)</em></span>
       <span>Drop a portal</span><span>P</span>
       <span>Go through a portal (aim at it)</span><span>Enter</span>
       <span>Return to parent world</span><span>Q</span>
