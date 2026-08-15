@@ -130,16 +130,33 @@ is much easier to turn into a clean 3D mesh.
 - **Placeholder (offline)** — no setup, no keys. Renders your prompt onto a card.
   Good for trying the whole flow, including a stand-in "3D" mesh.
 
-- **fal.ai (cloud, API key)** — the fastest path to real images. fal.ai works
-  directly from the browser (most image APIs don't), hosts fast/cheap models (Flux
-  schnell) and TRELLIS for image→3D.
+- **OpenRouter (cloud, API key)** — the easiest cloud option and a good default:
+  one key reaches most current image models (Gemini Flash Image, FLUX.2, GPT Image,
+  Seedream, Qwen…). Key from `openrouter.ai/keys`, paste it in **Settings (⚙)**, pick
+  the model per world on the sidebar.
+
+- **OpenAI (cloud, API key)** — `gpt-image-1.5` / `gpt-image-1` / DALL·E 3. Key from
+  `platform.openai.com/api-keys`.
+
+- **Stability AI (cloud, API key)** — Stable Image Core / Ultra / SD 3.5, **and** a
+  second image→3D path: Stable Fast 3D returns a GLB in one call. Key from
+  `platform.stability.ai`.
+
+- **Google Gemini (cloud, API key)** — Gemini 3.1 Flash Image and friends. Key from
+  `aistudio.google.com/apikey`.
+
+- **fal.ai (cloud, API key)** — fast/cheap models (Flux schnell) and TRELLIS for
+  image→3D.
   1. Sign up at [fal.ai](https://fal.ai) and create a key at
      `fal.ai/dashboard/keys`.
   2. Open **Settings (⚙)** → paste the key. Pick a **Model** in the panel.
   3. Set the world's pipeline to **fal.ai**.
 
-  Your key is stored only in this browser and sent only to fal.ai. You pay fal per
-  render.
+  Every key is stored only in this browser and sent only to that provider; you pay
+  the provider per render. **A key pasted into any browser app is visible to anything
+  running on the page** — use one you can revoke, and set a spend limit if the
+  provider offers one. (Providers that refuse browser calls outright, like Replicate,
+  can't be supported without a server, which this project deliberately doesn't have.)
 
 - **Local ComfyUI (localhost)** — free, private, on your own GPU. The flagship path.
   1. Install and run [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Start it

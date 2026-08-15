@@ -132,6 +132,7 @@ class App {
     setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
     testLocal: () => this.testLocal(),
     setPreamble: (text) => this.setPreamble(text),
+    setProviderKey: (id, key) => this.setProviderKey(id, key),
   });
 
   private genSettings: GenerationSettings = loadGenerationSettings();
@@ -249,6 +250,7 @@ class App {
       setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
       setStyle: (id) => this.setStyle(id),
       setFalModel: (model) => this.setFalModel(model),
+      setProviderModel: (id, model) => this.setProviderModel(id, model),
       enterPortal: (id) => void this.enterPortal(id),
       removePortal: (id) => this.removePortal(id),
       renamePortal: (id, name) => this.renamePortal(id, name),
@@ -992,6 +994,7 @@ class App {
       can3d: getBackend(this.activeBackendId())?.can3d ?? false,
       styleId: this.palace.generation?.style ?? 'none',
       falModel: this.genSettings.fal?.model ?? DEFAULT_FAL_MODEL,
+      providerModels: this.genSettings.models ?? {},
     });
   }
 
@@ -1152,8 +1155,13 @@ class App {
     return [{ id: NONE_ID, label: 'None (text only)' }, ...listBackends().map((b) => ({ id: b.id, label: b.label }))];
   }
 
-  private genConfig(): { local?: LocalConfig; fal?: FalConfig; preamble?: string } {
-    return { local: this.genSettings.local, fal: this.genSettings.fal, preamble: this.genSettings.preamble };
+  private genConfig(): { local?: LocalConfig; fal?: FalConfig; preamble?: string; keys?: Record<string, string> } {
+    return {
+      local: this.genSettings.local,
+      fal: this.genSettings.fal,
+      preamble: this.genSettings.preamble,
+      keys: this.genSettings.keys,
+    };
   }
 
   /** The pipeline THIS world uses (per-world, stored in the palace). */
@@ -1192,6 +1200,22 @@ class App {
 
   private setFalConfig(apiKey: string, model: string): void {
     this.genSettings = { ...this.genSettings, fal: { apiKey, model } };
+    saveGenerationSettings(this.genSettings);
+  }
+
+  /** Store which model a cloud provider should use (app-global, like the key). */
+  private setProviderModel(providerId: string, model: string): void {
+    this.genSettings = { ...this.genSettings, models: { ...(this.genSettings.models ?? {}), [providerId]: model } };
+    saveGenerationSettings(this.genSettings);
+    this.syncGeneration();
+  }
+
+  /** Store (or clear) a cloud provider's API key. */
+  private setProviderKey(providerId: string, key: string): void {
+    const keys = { ...(this.genSettings.keys ?? {}) };
+    if (key.trim()) keys[providerId] = key.trim();
+    else delete keys[providerId];
+    this.genSettings = { ...this.genSettings, keys };
     saveGenerationSettings(this.genSettings);
   }
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_LOCAL_WORKFLOW,
   type FalConfig,
   DEFAULT_PREAMBLE,
+  KEY_PROVIDERS,
   buildPrompt,
   type LocalConfig,
 } from '../model/generation';
@@ -17,6 +18,8 @@ import {
 export interface SettingsHandlers {
   setFalConfig(apiKey: string, model: string): void;
   setLocalConfig(url: string, workflow: string): void;
+  /** Store (or clear) the API key for a key-only cloud provider. */
+  setProviderKey(providerId: string, key: string): void;
   testLocal(): Promise<string>;
   /** Persist the rendering preamble (empty string = none, undefined = the default). */
   setPreamble(text: string | undefined): void;
@@ -37,7 +40,7 @@ export class SettingsDialog {
     this.hide();
   }
 
-  open(config: { local?: LocalConfig; fal?: FalConfig; preamble?: string }): void {
+  open(config: { local?: LocalConfig; fal?: FalConfig; preamble?: string; keys?: Record<string, string> }): void {
     this.root.replaceChildren(this.buildCard(config));
     this.root.style.display = 'flex';
   }
@@ -47,7 +50,7 @@ export class SettingsDialog {
     this.root.replaceChildren();
   }
 
-  private buildCard(config: { local?: LocalConfig; fal?: FalConfig; preamble?: string }): HTMLElement {
+  private buildCard(config: { local?: LocalConfig; fal?: FalConfig; preamble?: string; keys?: Record<string, string> }): HTMLElement {
     const card = div('settings-card');
 
     const header = div('settings-header');
@@ -121,12 +124,32 @@ export class SettingsDialog {
     return wrap;
   }
 
-  private generationCreds(config: { local?: LocalConfig; fal?: FalConfig }): HTMLElement {
+  private generationCreds(config: { local?: LocalConfig; fal?: FalConfig; keys?: Record<string, string> }): HTMLElement {
     const wrap = div('settings-section');
     wrap.appendChild(sectionTitle('Image generation — keys & endpoints'));
     const note = div('settings-note');
     note.textContent = 'Configured once and shared across worlds. Each world picks which of these to use.';
     wrap.appendChild(note);
+    const warn = div('settings-note settings-warn');
+    warn.innerHTML =
+      '⚠️ A key pasted into any browser app is visible to anything running on this page and travels with every request. ' +
+      'Use a key you can revoke, and set a spend limit where the provider offers one.';
+    wrap.appendChild(warn);
+
+    // The key-only cloud providers (OpenRouter, OpenAI, Stability, Gemini). Each is
+    // pure data — see KEY_PROVIDERS in model/generation.ts.
+    for (const provider of KEY_PROVIDERS) {
+      const f = field(provider.label, 'paste your key');
+      const input = f.input as HTMLInputElement;
+      input.type = 'password';
+      input.autocomplete = 'off';
+      input.value = config.keys?.[provider.id] ?? '';
+      input.oninput = () => this.handlers.setProviderKey(provider.id, input.value);
+      wrap.appendChild(f.el);
+      const hint = div('settings-hint');
+      hint.innerHTML = provider.hint;
+      wrap.appendChild(hint);
+    }
 
     // fal.ai
     const falKey = field('fal.ai API key', 'paste your key');

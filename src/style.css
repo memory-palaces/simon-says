@@ -1625,3 +1625,9 @@ canvas.picking {
   font-style: italic;
   word-break: break-word;
 }
+
+/* Key-exposure caution in Settings. */
+.settings-warn {
+  color: #ffcf5c;
+  opacity: 0.95;
+}

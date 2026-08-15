@@ -288,6 +288,235 @@ interface ComfyImage {
 
 // --- fal.ai cloud backend (byo-key, browser-friendly, fastest to try) -------
 
+// ---------------------------------------------------------------------------
+// Key-only cloud providers.
+//
+// A provider can only live here if it answers CORS preflights: this is a static
+// browser app with no server to proxy through. Verified against each provider's
+// live API — Replicate is deliberately absent (it sends no access-control-*
+// headers at all, so the browser blocks every response).
+//
+// Every key is stored in this browser's localStorage and sent only to that
+// provider. A key pasted into any static page is visible to anything running on
+// the page — the UI says so next to each field.
+// ---------------------------------------------------------------------------
+
+/** Turn raw base64 + a mime type into the data URL the palace stores. */
+function base64ToDataUrl(b64: string, mime = 'image/png'): string {
+  return b64.startsWith('data:') ? b64 : `data:${mime};base64,${b64}`;
+}
+
+/** A stable per-render seed so "reroll" differs but the same prompt repeats. */
+function seedFor(prompt: string, seed: number): number {
+  return (parseInt(promptHash(prompt), 16) + seed * 100003) % 2147483647;
+}
+
+/** Pull a useful message out of an error body instead of showing a bare status. */
+async function errorDetail(res: Response): Promise<string> {
+  try {
+    const text = await res.text();
+    try {
+      const j = JSON.parse(text) as { error?: { message?: string } | string; errors?: string[]; message?: string };
+      const msg =
+        (typeof j.error === 'string' ? j.error : j.error?.message) ?? j.message ?? j.errors?.join('; ');
+      if (msg) return `: ${msg}`;
+    } catch {
+      if (text) return `: ${text.slice(0, 200)}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
+export const OPENROUTER_MODEL_PRESETS = [
+  { id: 'google/gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image (fast)' },
+  { id: 'google/gemini-3-pro-image', label: 'Gemini 3 Pro Image (quality)' },
+  { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro' },
+  { id: 'openai/gpt-image-1-mini', label: 'GPT Image 1 mini (cheap)' },
+  { id: 'openai/gpt-image-2', label: 'GPT Image 2' },
+  { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro' },
+  { id: 'qwen/qwen-image-3', label: 'Qwen Image 3' },
+];
+export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODEL_PRESETS[0].id;
+
+/**
+ * OpenRouter — one key, one CORS-clean endpoint, most current image models behind
+ * it. `HTTP-Referer`/`X-Title` are optional attribution headers; we send a title so
+ * renders are traceable in the user's OpenRouter dashboard.
+ */
+export class OpenRouterBackend implements GenerationBackend {
+  readonly id = 'openrouter';
+  readonly label = 'OpenRouter (cloud, API key)';
+  readonly offline = false;
+  readonly can3d = false;
+
+  async generateImage(prompt: string, seed: number): Promise<string> {
+    const key = providerKey(this.id);
+    if (!key) throw new Error('Paste your OpenRouter API key in Settings (⚙).');
+    const res = await fetch('https://openrouter.ai/api/v1/images', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'Simon Says',
+      },
+      body: JSON.stringify({
+        model: providerModel(this.id, DEFAULT_OPENROUTER_MODEL),
+        prompt,
+        n: 1,
+        seed: seedFor(prompt, seed),
+        output_format: 'png',
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenRouter error ${res.status}${await errorDetail(res)}`);
+    const data = (await res.json()) as { data?: Array<{ b64_json?: string; media_type?: string; url?: string }> };
+    const first = data.data?.[0];
+    if (first?.b64_json) return base64ToDataUrl(first.b64_json, first.media_type ?? 'image/png');
+    if (first?.url) return blobToDataUrl(await (await fetch(first.url)).blob());
+    throw new Error('OpenRouter returned no image.');
+  }
+}
+
+export const OPENAI_MODEL_PRESETS = [
+  { id: 'gpt-image-1.5', label: 'GPT Image 1.5' },
+  { id: 'gpt-image-1', label: 'GPT Image 1' },
+  { id: 'gpt-image-1-mini', label: 'GPT Image 1 mini (cheap)' },
+  { id: 'dall-e-3', label: 'DALL·E 3' },
+];
+export const DEFAULT_OPENAI_MODEL = OPENAI_MODEL_PRESETS[0].id;
+
+/**
+ * OpenAI Images. api.openai.com does send `access-control-allow-origin: *`, so a
+ * browser call works — the SDK's `dangerouslyAllowBrowser` flag is about key
+ * exposure, not a server restriction. GPT image models always return base64;
+ * `response_format` is a DALL·E-only field, so we never send it.
+ */
+export class OpenAIBackend implements GenerationBackend {
+  readonly id = 'openai';
+  readonly label = 'OpenAI (cloud, API key)';
+  readonly offline = false;
+  readonly can3d = false;
+
+  async generateImage(prompt: string): Promise<string> {
+    const key = providerKey(this.id);
+    if (!key) throw new Error('Paste your OpenAI API key in Settings (⚙).');
+    const model = providerModel(this.id, DEFAULT_OPENAI_MODEL);
+    const body: Record<string, unknown> = { model, prompt, n: 1, size: '1024x1024' };
+    if (model.startsWith('dall-e')) body.response_format = 'b64_json'; // DALL·E defaults to a URL
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`OpenAI error ${res.status}${await errorDetail(res)}`);
+    const data = (await res.json()) as { data?: Array<{ b64_json?: string; url?: string }>; output_format?: string };
+    const first = data.data?.[0];
+    if (first?.b64_json) return base64ToDataUrl(first.b64_json, `image/${data.output_format ?? 'png'}`);
+    if (first?.url) return blobToDataUrl(await (await fetch(first.url)).blob());
+    throw new Error('OpenAI returned no image.');
+  }
+}
+
+export const STABILITY_MODEL_PRESETS = [
+  { id: 'core', label: 'Stable Image Core (fast)' },
+  { id: 'ultra', label: 'Stable Image Ultra (quality)' },
+  { id: 'sd3', label: 'Stable Diffusion 3.5' },
+];
+export const DEFAULT_STABILITY_MODEL = STABILITY_MODEL_PRESETS[0].id;
+
+/**
+ * Stability AI. Requests MUST be multipart/form-data (let the browser set the
+ * boundary — never set Content-Type by hand). Unusually for this list it also does
+ * image→3D synchronously: /v2beta/3d/stable-fast-3d answers with a GLB body.
+ */
+export class StabilityBackend implements GenerationBackend {
+  readonly id = 'stability';
+  readonly label = 'Stability AI (cloud, API key)';
+  readonly offline = false;
+  readonly can3d = true;
+
+  async generateImage(prompt: string, seed: number): Promise<string> {
+    const key = providerKey(this.id);
+    if (!key) throw new Error('Paste your Stability API key in Settings (⚙).');
+    const form = new FormData();
+    form.set('prompt', prompt);
+    form.set('output_format', 'png');
+    form.set('seed', String(seedFor(prompt, seed)));
+    const res = await fetch(
+      `https://api.stability.ai/v2beta/stable-image/generate/${providerModel(this.id, DEFAULT_STABILITY_MODEL)}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' }, body: form },
+    );
+    if (!res.ok) throw new Error(`Stability error ${res.status}${await errorDetail(res)}`);
+    const data = (await res.json()) as { image?: string; finish_reason?: string };
+    if (!data.image) throw new Error('Stability returned no image.');
+    if (data.finish_reason === 'CONTENT_FILTERED') {
+      throw new Error('Stability filtered this prompt — the image came back blurred. Try rewording it.');
+    }
+    return base64ToDataUrl(data.image);
+  }
+
+  /** Image → GLB in one call (no polling); the response body IS the model. */
+  async imageTo3d(imageDataUrl: string): Promise<string> {
+    const key = providerKey(this.id);
+    if (!key) throw new Error('Paste your Stability API key in Settings (⚙).');
+    const form = new FormData();
+    form.set('image', await (await fetch(imageDataUrl)).blob(), 'image.png'); // multipart wants bytes, not a data URL
+    form.set('texture_resolution', '1024');
+    const res = await fetch('https://api.stability.ai/v2beta/3d/stable-fast-3d', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Stability 3D error ${res.status}${await errorDetail(res)}`);
+    return blobToDataUrl(await res.blob());
+  }
+}
+
+export const GEMINI_MODEL_PRESETS = [
+  { id: 'gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image' },
+  { id: 'gemini-3.1-flash-lite-image', label: 'Gemini 3.1 Flash Lite (cheapest)' },
+  { id: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image' },
+  { id: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image (legacy)' },
+];
+export const DEFAULT_GEMINI_MODEL = GEMINI_MODEL_PRESETS[0].id;
+
+/**
+ * Google Gemini via the Interactions API. The key goes in `x-goog-api-key` (not the
+ * URL, so it stays out of logs and history). The image comes back as base64 inside
+ * steps[].content[], which we walk rather than assuming a fixed position.
+ */
+export class GeminiBackend implements GenerationBackend {
+  readonly id = 'gemini';
+  readonly label = 'Google Gemini (cloud, API key)';
+  readonly offline = false;
+  readonly can3d = false;
+
+  async generateImage(prompt: string): Promise<string> {
+    const key = providerKey(this.id);
+    if (!key) throw new Error('Paste your Gemini API key in Settings (⚙).');
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: providerModel(this.id, DEFAULT_GEMINI_MODEL),
+        input: [{ type: 'text', text: prompt }],
+        response_format: { type: 'image', mime_type: 'image/png' },
+      }),
+    });
+    if (!res.ok) throw new Error(`Gemini error ${res.status}${await errorDetail(res)}`);
+    const data = (await res.json()) as {
+      steps?: Array<{ content?: Array<{ type?: string; data?: string; mime_type?: string }> }>;
+    };
+    for (const step of data.steps ?? []) {
+      for (const part of step.content ?? []) {
+        if (part.type === 'image' && part.data) return base64ToDataUrl(part.data, part.mime_type ?? 'image/png');
+      }
+    }
+    throw new Error('Gemini returned no image.');
+  }
+}
+
 export const DEFAULT_FAL_MODEL = 'fal-ai/flux/schnell';
 
 export interface FalConfig {
@@ -357,7 +586,15 @@ export class FalBackend implements GenerationBackend {
 }
 
 /** Backends available in this build. `none` is represented by absence (null). */
-const BACKENDS: GenerationBackend[] = [new PlaceholderBackend(), new FalBackend(), new LocalComfyBackend()];
+const BACKENDS: GenerationBackend[] = [
+  new PlaceholderBackend(),
+  new OpenRouterBackend(),
+  new OpenAIBackend(),
+  new FalBackend(),
+  new StabilityBackend(),
+  new GeminiBackend(),
+  new LocalComfyBackend(),
+];
 
 export function listBackends(): GenerationBackend[] {
   // The offline placeholder is hidden from the picker — it's only the silent
@@ -375,6 +612,7 @@ export function getBackend(id: string): GenerationBackend | null {
 const SETTINGS_KEY = 'simon-says:generation:v1';
 const LEGACY_SETTINGS_KEY = 'mempal:generation:v1'; // pre-rename key, migrated on first read
 
+
 /** App-global generation credentials. The pipeline CHOICE is per-world (in Palace). */
 /**
  * Simple "paste an API key" providers. Each entry drives both the Settings UI and
@@ -385,10 +623,48 @@ const LEGACY_SETTINGS_KEY = 'mempal:generation:v1'; // pre-rename key, migrated 
 export interface KeyProviderMeta {
   id: string;
   label: string;
-  /** Where the user gets a key. */
-  keyUrl: string;
   /** Shown under the field; may contain HTML. */
   hint: string;
+  /** Model choices offered per world in the sidebar. */
+  models: Array<{ id: string; label: string }>;
+  defaultModel: string;
+}
+
+/** Everything the Settings dialog and the sidebar need to offer a provider. */
+export const KEY_PROVIDERS: KeyProviderMeta[] = [
+  {
+    id: 'openrouter',
+    label: 'OpenRouter API key',
+    hint: 'Key from <code>openrouter.ai/keys</code>. One key, most current image models — a good default.',
+    models: OPENROUTER_MODEL_PRESETS,
+    defaultModel: DEFAULT_OPENROUTER_MODEL,
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI API key',
+    hint: 'Key from <code>platform.openai.com/api-keys</code>.',
+    models: OPENAI_MODEL_PRESETS,
+    defaultModel: DEFAULT_OPENAI_MODEL,
+  },
+  {
+    id: 'stability',
+    label: 'Stability AI API key',
+    hint: 'Key from <code>platform.stability.ai</code>. Also does image→3D (Stable Fast 3D) alongside fal.ai.',
+    models: STABILITY_MODEL_PRESETS,
+    defaultModel: DEFAULT_STABILITY_MODEL,
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini API key',
+    hint: 'Key from <code>aistudio.google.com/apikey</code>.',
+    models: GEMINI_MODEL_PRESETS,
+    defaultModel: DEFAULT_GEMINI_MODEL,
+  },
+];
+
+/** The provider meta for a backend id, if it's a key-only cloud provider. */
+export function keyProvider(id: string): KeyProviderMeta | undefined {
+  return KEY_PROVIDERS.find((p) => p.id === id);
 }
 
 export interface GenerationSettings {
@@ -478,3 +754,4 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: num
   const startY = y - ((shown.length - 1) * lineHeight) / 2;
   shown.forEach((l, i) => ctx.fillText(l, x, startY + i * lineHeight));
 }
+

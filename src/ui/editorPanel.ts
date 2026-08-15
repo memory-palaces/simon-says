@@ -1,5 +1,5 @@
 import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Decor, type Locus, type Palace, type Portal, type SceneProp } from '../model/palace';
-import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS } from '../model/generation';
+import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS, keyProvider } from '../model/generation';
 import { downloadAsset } from './download';
 
 interface GenState {
@@ -8,6 +8,8 @@ interface GenState {
   can3d: boolean;
   styleId: string;
   falModel: string;
+  /** Chosen model per key-only provider id (falls back to that provider's default). */
+  providerModels: Record<string, string>;
 }
 
 /** Everything the panel needs to call back into the app. */
@@ -54,6 +56,7 @@ export interface EditorHandlers {
   removeAttachment(id: string, index: number): void;
   setStyle(id: string): void;
   setFalModel(model: string): void;
+  setProviderModel(providerId: string, model: string): void;
   enterPortal(id: string): void;
   removePortal(id: string): void;
   renamePortal(id: string, name: string): void;
@@ -134,6 +137,7 @@ export class EditorPanel {
     can3d: false,
     styleId: 'none',
     falModel: DEFAULT_FAL_MODEL,
+    providerModels: {},
   };
 
   constructor(mount: HTMLElement, handlers: EditorHandlers) {
@@ -999,6 +1003,17 @@ export class EditorPanel {
       if (this.gen.activeId === 'fal') {
         wrap.appendChild(
           labeledSelect('Model', FAL_MODEL_PRESETS, this.gen.falModel, (v) => this.handlers.setFalModel(v)),
+        );
+      }
+      const provider = keyProvider(this.gen.activeId);
+      if (provider) {
+        wrap.appendChild(
+          labeledSelect(
+            'Model',
+            provider.models,
+            this.gen.providerModels[provider.id] ?? provider.defaultModel,
+            (v) => this.handlers.setProviderModel(provider.id, v),
+          ),
         );
       }
       // Style modifier — a rendering suffix, not a change to the mnemonic.
