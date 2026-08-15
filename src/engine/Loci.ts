@@ -38,6 +38,10 @@ interface Marker {
   /** Billboard of the generated 2D image, shown above the marker when present. */
   image?: THREE.Sprite;
   imageSrc?: string;
+  /** The mnemonic text as a floating plaque (see Environment.captions). */
+  caption?: THREE.Sprite;
+  captionText?: string;
+  captionAspect?: number;
   /** Generated 3D mesh placed at the locus; supersedes the flat image. */
   mesh3d?: THREE.Object3D;
   mesh3dSrc?: string;
@@ -95,6 +99,7 @@ export class LociLayer {
   /** Reconcile the rendered markers with the palace's loci. */
   sync(palace: Palace): void {
     const live = new Set<string>();
+    const captions = palace.environment?.captions !== false; // default on
     for (const locus of palace.loci) {
       live.add(locus.id);
       const root = this.resolve(locus.asset_id);
@@ -117,6 +122,7 @@ export class LociLayer {
       marker.objectRot.set(r[0], r[1], r[2]);
       this.updatePortal(marker);
       this.updateImage(marker, locus.image_2d);
+      this.updateCaption(marker, captions ? locus.image_prompt : '');
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
       this.syncProps(marker, locus);
@@ -300,6 +306,15 @@ export class LociLayer {
       marker.image.position.copy(marker.normal).multiplyScalar(0.5 * os);
       marker.image.position.y += 0.8 * os;
     }
+    if (marker.caption) {
+      // Sit above the image when one is showing, otherwise take its place.
+      const a = marker.captionAspect ?? 3;
+      const h = 0.34;
+      marker.caption.scale.set(h * a, h, 1);
+      marker.caption.position.copy(marker.normal).multiplyScalar(0.5 * os);
+      const imageShown = !!marker.image && marker.image.visible;
+      marker.caption.position.y += imageShown ? 0.8 * os + 0.45 * os + h * 0.5 + 0.05 : 0.75;
+    }
     if (marker.mesh3d && marker.meshRawCenter && marker.meshMaxDim) {
       // Fit into ~0.8u, times the per-locus object scale.
       const scale = (0.8 / marker.meshMaxDim) * os;
@@ -469,6 +484,30 @@ export class LociLayer {
     }
   }
 
+  /** Show (or hide) the mnemonic text as a plaque above the marker. */
+  private updateCaption(marker: Marker, text: string): void {
+    const t = text.trim();
+    if (!t) {
+      if (marker.caption) marker.caption.visible = false;
+      return;
+    }
+    if (!marker.caption) {
+      marker.caption = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, toneMapped: false }));
+      marker.caption.renderOrder = 10; // readable over nearby walls, like the image
+      marker.group.add(marker.caption);
+    }
+    if (marker.captionText !== t) {
+      marker.captionText = t;
+      const mat = marker.caption.material as THREE.SpriteMaterial;
+      mat.map?.dispose();
+      const { tex, aspect } = textTexture(t);
+      mat.map = tex;
+      mat.needsUpdate = true;
+      marker.captionAspect = aspect;
+    }
+    marker.caption.visible = true;
+  }
+
   /** Load and place the generated GLB at the locus, scaled to a sensible size. */
   private async updateMesh3d(marker: Marker, src: string | null): Promise<void> {
     if ((src ?? undefined) === marker.mesh3dSrc) return;
@@ -588,7 +627,7 @@ export class LociLayer {
    * generated 3D mesh always stays depth-tested (it's a real object in the space).
    */
   private applyXray(marker: Marker): void {
-    const sprites = [marker.core, marker.halo, marker.label, marker.image];
+    const sprites = [marker.core, marker.halo, marker.label, marker.image, marker.caption];
     const order = this.xray ? 10 : 0;
     for (const s of sprites) {
       if (!s) continue;
@@ -766,14 +805,51 @@ function buildProp(kind: SceneProp['kind']): PropObj {
 }
 
 /** A rounded translucent plaque with the caption text; returns its aspect ratio too. */
+/**
+ * Render text into a rounded dark plaque. Long text word-wraps at ~MAX_LINE px and
+ * is capped at MAX_LINES (ellipsis) so a paragraph-length mnemonic stays legible
+ * in the world instead of becoming a 20-metre-wide strip.
+ */
 function textTexture(text: string): { tex: THREE.Texture; aspect: number } {
   const fontSize = 64;
   const pad = 26;
+  const lineH = Math.round(fontSize * 1.18);
+  const MAX_LINE = 900;
+  const MAX_LINES = 4;
   const meas = document.createElement('canvas').getContext('2d')!;
   const font = `bold ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
   meas.font = font;
-  const w = Math.min(1200, Math.max(80, Math.ceil(meas.measureText(text).width) + pad * 2));
-  const h = fontSize + pad * 2;
+
+  // Greedy word wrap; hard-break any single word wider than a line.
+  const lines: string[] = [];
+  for (const para of text.split(/\r?\n/)) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const trial = line ? `${line} ${word}` : word;
+      if (meas.measureText(trial).width <= MAX_LINE) {
+        line = trial;
+      } else {
+        if (line) lines.push(line);
+        line = word;
+        while (meas.measureText(line).width > MAX_LINE && line.length > 1) {
+          let cut = line.length - 1;
+          while (cut > 1 && meas.measureText(line.slice(0, cut)).width > MAX_LINE) cut--;
+          lines.push(line.slice(0, cut));
+          line = line.slice(cut);
+        }
+      }
+    }
+    lines.push(line);
+  }
+  while (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length > MAX_LINES) {
+    lines.length = MAX_LINES;
+    lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1].replace(/\s*\S*$/, '')}…`;
+  }
+
+  const textW = Math.max(...lines.map((l) => meas.measureText(l).width));
+  const w = Math.min(MAX_LINE + pad * 2, Math.max(80, Math.ceil(textW) + pad * 2));
+  const h = lineH * lines.length + pad * 2;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -790,7 +866,7 @@ function textTexture(text: string): { tex: THREE.Texture; aspect: number } {
   ctx.font = font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, w / 2, h / 2 + 2);
+  lines.forEach((l, i) => ctx.fillText(l, w / 2, pad + lineH * (i + 0.5) + 2));
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return { tex, aspect: w / h };

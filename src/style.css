@@ -1591,3 +1591,17 @@ canvas {
   color: var(--ui-dim);
   cursor: pointer;
 }
+
+/* A labelled checkbox row in the world-settings section. */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ui-dim);
+  cursor: pointer;
+}
+.check-row input {
+  accent-color: var(--ui-accent);
+}

@@ -187,6 +187,7 @@ class App {
       },
       updatePrompt: (id, text) => {
         this.mutateLocus(id, (l) => (l.image_prompt = text), false);
+        this.loci.sync(this.palace); // the in-world plaque mirrors the text live
         this.checkpointSoon();
       },
       reorder: (id, dir) => this.reorder(id, dir),
@@ -198,6 +199,7 @@ class App {
       setPattern: (id) => this.setPattern(id),
       setBrightness: (v) => this.setBrightness(v),
       setPlayerScale: (v) => this.setPlayerScale(v),
+      setCaptions: (on) => this.setCaptions(on),
       toggleScaleFigure: () => this.toggleScaleFigure(),
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
@@ -1006,6 +1008,13 @@ class App {
     this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), playerScale: value };
     this.viewer.fp.setScale(value);
     this.viewer.setScaleFigureScale(value);
+    this.markDirty();
+    this.checkpointSoon();
+  }
+
+  private setCaptions(on: boolean): void {
+    this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), captions: on };
+    this.loci.sync(this.palace);
     this.markDirty();
     this.checkpointSoon();
   }

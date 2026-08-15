@@ -237,6 +237,12 @@ export interface Environment {
   playerScale?: number;
   /** A gradient-sky pattern id (overrides the solid background when set). */
   pattern?: string;
+  /**
+   * Float each locus's mnemonic text in the world as a plaque above its marker
+   * (above the image, when there is one). Undefined = on: most people never set up
+   * image generation, so the words themselves are what they see in the palace.
+   */
+  captions?: boolean;
 }
 
 /** Cheerful vertical-gradient sky presets (top -> horizon). */

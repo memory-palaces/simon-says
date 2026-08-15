@@ -37,6 +37,7 @@ export interface EditorHandlers {
   setPattern(id: string): void;
   setBrightness(value: number): void;
   setPlayerScale(value: number): void;
+  setCaptions(on: boolean): void;
   toggleScaleFigure(): void;
   setBackendId(id: string): void;
   generate(id: string): void;
@@ -509,6 +510,20 @@ export class EditorPanel {
         onChange: (v) => this.handlers.setBrightness(v),
       }),
     );
+
+    // Mnemonic text in the world — on by default: without image generation set up,
+    // the words are the whole point of visiting a locus.
+    const cap = document.createElement('label');
+    cap.className = 'check-row';
+    const capBox = document.createElement('input');
+    capBox.type = 'checkbox';
+    capBox.checked = palace.environment?.captions !== false;
+    capBox.onchange = () => this.handlers.setCaptions(capBox.checked);
+    const capText = document.createElement('span');
+    capText.textContent = 'Show mnemonic text in the world';
+    cap.title = 'Float each locus’s mnemonic as a plaque above its marker (above the image, if it has one)';
+    cap.append(capBox, capText);
+    wrap.appendChild(cap);
 
     // Player scale — be tiny (space feels huge) or a giant. The 🚶 button drops a
     // person-sized reference so you can eyeball the scale.
