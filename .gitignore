@@ -16,3 +16,7 @@ dist/
 
 # Personal, machine-local Claude Code permission grants (and atomic-write temp files)
 .claude/settings.local.json*
+
+# Local secrets (e.g. GITHUB_PAT for gh)
+.env
+.env.*
