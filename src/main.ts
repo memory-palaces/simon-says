@@ -688,6 +688,18 @@ class App {
       else if (this.placingDecor) this.finishDecorPlacement();
       else if (this.mode === 'walk' && !this.movingId && (this.targetedId || this.targetedPortalId)) this.clickTargeted();
     });
+    // While in bird's-eye view, track the spot under the cursor so you can see
+    // exactly where a click would drop you.
+    canvas.addEventListener('mousemove', (e) => {
+      if (!this.overview) return;
+      const hit = this.viewer.raycastScreen(e.clientX, e.clientY);
+      if (hit) this.viewer.showPickMarker(hit.point, hit.normal);
+      else this.viewer.hidePickMarker();
+    });
+    canvas.addEventListener('mouseleave', () => {
+      if (this.overview) this.viewer.hidePickMarker();
+    });
+
     // Right-click releases the mouse (like Esc), so you don't have to reach for it.
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('mousedown', (e) => {
@@ -1090,7 +1102,8 @@ class App {
     this.overview = { pose: this.viewer.cameraPose(), wasFlying: this.viewer.fp.mode === 'fly' };
     this.viewer.fp.setFlying(true); // no gravity while we're above the world
     this.viewer.flyTo(pose.position, pose.lookAt, OVERVIEW_MS);
-    this.overlay.setCrosshair(false);
+    this.overlay.setCrosshair(false); // the pointer is free up here; we mark the
+    this.viewer.renderer.domElement.classList.add('picking'); // spot under the cursor
     this.overlay.setHud('Bird’s-eye view — click to go there · V to return');
   }
 
@@ -1111,6 +1124,8 @@ class App {
       this.viewer.flyToPose(state.pose, OVERVIEW_MS);
       if (!state.wasFlying) window.setTimeout(() => this.viewer.fp.setFlying(false), OVERVIEW_MS + 30);
     }
+    this.viewer.renderer.domElement.classList.remove('picking');
+    this.viewer.hidePickMarker();
     this.overlay.setCrosshair(this.mode === 'walk');
     this.overlay.setHud('');
   }

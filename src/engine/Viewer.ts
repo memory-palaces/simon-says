@@ -267,6 +267,41 @@ export class Viewer {
     return { point: hit.point.clone(), normal };
   }
 
+  private pickMarker: THREE.Group | null = null;
+
+  /**
+   * A ring drawn flat on the surface under the cursor — the "you'll land here"
+   * marker for the bird's-eye view, where the pointer is free and the fixed centre
+   * crosshair would be meaningless. Sized from the camera's height so it stays
+   * visible whether you're 10 m or 200 m up.
+   */
+  showPickMarker(point: THREE.Vector3, normal: THREE.Vector3): void {
+    if (!this.pickMarker) {
+      const group = new THREE.Group();
+      const mat = (color: number, opacity: number) =>
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+      // Dark ring under the gold one so it reads on pale ground as well as dark.
+      const halo = new THREE.Mesh(new THREE.RingGeometry(0.72, 1.14, 44), mat(0x10131a, 0.55));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.06, 44), mat(0xffcf5c, 1));
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.26, 24), mat(0xffcf5c, 1));
+      group.add(halo, ring, dot);
+      group.renderOrder = 999; // always on top, never hidden by a roof edge
+      group.children.forEach((c, i) => (c.renderOrder = 999 + i)); // renderOrder is per-object, not inherited
+      this.scene.add(group);
+      this.pickMarker = group;
+    }
+    const m = this.pickMarker;
+    m.visible = true;
+    m.position.copy(point).addScaledVector(normal, 0.05);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal); // ring's local axis is +Z
+    const scale = Math.max(0.8, this.camera.position.distanceTo(point) * 0.03);
+    m.scale.setScalar(scale);
+  }
+
+  hidePickMarker(): void {
+    if (this.pickMarker) this.pickMarker.visible = false;
+  }
+
   /** Current camera pose, for restoring after a scripted detour (e.g. overview). */
   cameraPose(): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
     return { position: this.camera.position.clone(), quaternion: this.camera.quaternion.clone() };

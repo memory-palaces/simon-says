@@ -1605,3 +1605,9 @@ canvas {
 .check-row input {
   accent-color: var(--ui-accent);
 }
+
+/* Bird's-eye view: the pointer is free, so show it as a crosshair (the in-world
+   ring marks the exact landing spot). */
+canvas.picking {
+  cursor: crosshair;
+}
