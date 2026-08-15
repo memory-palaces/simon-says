@@ -161,7 +161,7 @@ export const DEFAULT_LOCAL_WORKFLOW = JSON.stringify(
     '6': { class_type: 'CLIPTextEncode', inputs: { text: '{PROMPT}', clip: ['4', 1] } },
     '7': { class_type: 'CLIPTextEncode', inputs: { text: 'blurry, text, watermark', clip: ['4', 1] } },
     '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'mempal', images: ['8', 0] } },
+    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'simon-says', images: ['8', 0] } },
   },
   null,
   2,
@@ -210,7 +210,7 @@ export class LocalComfyBackend implements GenerationBackend {
     const submit = await fetch(`${base}/prompt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: workflow, client_id: `mempal-${promptHash(prompt)}${seed}` }),
+      body: JSON.stringify({ prompt: workflow, client_id: `simon-says-${promptHash(prompt)}${seed}` }),
     });
     if (!submit.ok) {
       throw new Error(`ComfyUI rejected the workflow (${submit.status}). Check the checkpoint name and node graph.`);
@@ -336,7 +336,8 @@ export function getBackend(id: string): GenerationBackend | null {
 
 // --- Which backend is active (persisted, app-level not per-palace) ----------
 
-const SETTINGS_KEY = 'mempal:generation:v1';
+const SETTINGS_KEY = 'simon-says:generation:v1';
+const LEGACY_SETTINGS_KEY = 'mempal:generation:v1'; // pre-rename key, migrated on first read
 
 /** App-global generation credentials. The pipeline CHOICE is per-world (in Palace). */
 export interface GenerationSettings {
@@ -350,6 +351,12 @@ export function loadGenerationSettings(): GenerationSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return JSON.parse(raw) as GenerationSettings;
+    const legacy = localStorage.getItem(LEGACY_SETTINGS_KEY);
+    if (legacy) {
+      localStorage.setItem(SETTINGS_KEY, legacy);
+      localStorage.removeItem(LEGACY_SETTINGS_KEY);
+      return JSON.parse(legacy) as GenerationSettings;
+    }
   } catch {
     /* ignore */
   }

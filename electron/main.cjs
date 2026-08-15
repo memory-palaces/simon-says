@@ -1,4 +1,4 @@
-// Electron shell for Memory Palace.
+// Electron shell for Simon Says.
 //
 // Why: the File System Access API (real save-back-to-file) only exists in
 // Chromium. Firefox/Safari users fall back to download-each-time. Electron bundles
@@ -10,14 +10,14 @@ const { app, BrowserWindow, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
-const DEV_URL = process.env.MEMPAL_DEV_URL;
+const DEV_URL = process.env.SIMON_DEV_URL;
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1360,
     height: 860,
     backgroundColor: '#0a0a0b',
-    title: 'Memory Palace',
+    title: 'Simon Says',
     autoHideMenuBar: true,
     webPreferences: {
       // The app is our own trusted code and needs no Node in the renderer; keep the

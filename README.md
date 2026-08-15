@@ -1,4 +1,8 @@
-# Memory Palace
+# Simon Says
+
+> Named for Simonides of Ceos, who — legend says — invented the method of loci after
+> a banquet-hall roof collapsed and he could name every guest by remembering where
+> they had sat. Live demo: **https://memory-palaces.github.io/simon-says/**
 
 A local-first web app for building and reviewing **memory palaces** (the method of
 loci). Import a 3D model of a space you know, walk it in first person, drop numbered
@@ -150,7 +154,7 @@ is much easier to turn into a clean 3D mesh.
   **Save** always works.
 
 A future *delivery* format (a single baked `.glb` any glTF viewer can open) is
-described in `memory-palace-SPEC-addendum-export.md`.
+described in `SPEC-addendum-export.md`.
 
 ---
 
@@ -176,7 +180,7 @@ fal.ai cloud, local ComfyUI) with styles, history, and an image→3D stage.
 Not yet: local (ComfyUI/TRELLIS) image→3D; nested child palaces; the baked-GLB export
 in Addendum A.
 
-See `memory-palace-SPEC.md` for the full design and build order.
+See `SPEC.md` for the full design and build order.
 
 ## License
 

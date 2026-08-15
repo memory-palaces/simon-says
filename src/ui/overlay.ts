@@ -41,13 +41,13 @@ export class Overlay {
 
   showLoading(name: string): void {
     this.setInteractive(true);
-    this.panelBody.innerHTML = `<h1>Memory Palace</h1><p class="loading">Loading ${escapeHtml(name)}…</p>`;
+    this.panelBody.innerHTML = `<h1>Simon Says</h1><p class="loading">Loading ${escapeHtml(name)}…</p>`;
   }
 
   showError(message: string): void {
     this.setInteractive(true);
     this.panelBody.innerHTML =
-      `<h1>Memory Palace</h1><p class="error">${escapeHtml(message)}</p>` +
+      `<h1>Simon Says</h1><p class="error">${escapeHtml(message)}</p>` +
       `<p>Drag a <code>.glb</code> or <code>.gltf</code> file onto the window to try another space.</p>`;
   }
 
@@ -55,7 +55,7 @@ export class Overlay {
   showStart(spaceName: string): void {
     this.setInteractive(true);
     this.panelBody.innerHTML = `
-      <h1>Memory Palace</h1>
+      <h1>Simon Says</h1>
       <p>Walking <b>${escapeHtml(spaceName)}</b></p>
       <div class="keys">
         <kbd>W A S D</kbd><span>move / strafe (or arrow keys)</span>

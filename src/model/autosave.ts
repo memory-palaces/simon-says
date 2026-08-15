@@ -9,14 +9,15 @@ import { assertPalace, type Palace } from './palace';
  * images/meshes as data URLs, which easily exceeds localStorage's ~5 MB cap. IDB has
  * no practical limit, so the draft "just works" for realistic sizes.
  */
-const DB_NAME = 'mempal';
+const DB_NAME = 'simon-says';
+const LEGACY_DB_NAME = 'mempal'; // pre-rename IndexedDB name, migrated on first read
 const STORE = 'draft';
 const KEY = 'current';
 const LEGACY_LS_KEY = 'mempal:draft:v1'; // pre-IndexedDB location, migrated on first read
 
-function openDb(): Promise<IDBDatabase> {
+function openDb(name = DB_NAME): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(name, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -67,8 +68,29 @@ export async function clearDraft(): Promise<void> {
   }
 }
 
-/** One-time: pull a draft written by the old localStorage version into IndexedDB. */
+/**
+ * One-time: pull a draft written by an older version into the current store —
+ * first the pre-rename IndexedDB ("mempal"), then the even older localStorage key.
+ */
 async function migrateLegacyDraft(): Promise<Palace | null> {
+  try {
+    const old = await openDb(LEGACY_DB_NAME);
+    if (old.objectStoreNames.contains(STORE)) {
+      const tx = old.transaction(STORE, 'readonly');
+      const data = await idbRequest<unknown>(tx.objectStore(STORE), (s) => s.get(KEY));
+      old.close();
+      indexedDB.deleteDatabase(LEGACY_DB_NAME); // opening created it if absent; don't leave a stub
+      if (data) {
+        assertPalace(data);
+        await saveDraft(data);
+        return data;
+      }
+    } else {
+      old.close();
+    }
+  } catch {
+    /* fall through to localStorage migration */
+  }
   try {
     const raw = localStorage.getItem(LEGACY_LS_KEY);
     if (!raw) return null;

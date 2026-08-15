@@ -4,7 +4,7 @@
 #
 # then open http://localhost:5173. No Node, no npm, nothing else on your machine.
 services:
-  mempal:
+  simon-says:
     build: .
     ports:
       - "5173:5173"

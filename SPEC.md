@@ -1,4 +1,4 @@
-# Memory Palace — Project Spec
+# Simon Says — Project Spec
 
 ## What we're building
 
