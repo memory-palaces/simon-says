@@ -1536,3 +1536,58 @@ canvas {
 .review-exit-btn:hover {
   color: var(--ui-fg);
 }
+
+/* First-run guide (📖 Guide). Shares the settings-modal chrome. */
+.welcome-card {
+  width: min(560px, 94vw);
+}
+.welcome-lead {
+  color: var(--ui-fg);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 4px 0 6px;
+}
+.welcome-steps {
+  margin: 4px 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.welcome-steps li + li {
+  margin-top: 4px;
+}
+.welcome-keys {
+  gap: 5px 12px;
+}
+.welcome-card kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  text-align: center;
+}
+.welcome-card a {
+  color: var(--ui-accent);
+}
+.welcome-more {
+  margin-top: 8px;
+}
+.welcome-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.welcome-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ui-dim);
+  cursor: pointer;
+}

@@ -19,7 +19,9 @@ Runs entirely offline. No accounts, no cloud dependency, no telemetry.
 
 ## Quick start
 
-You need one of:
+**Just try it:** open **https://memory-palaces.github.io/simon-says/** — nothing to
+install. A first-run guide pops up (📖 Guide brings it back any time). To run it
+locally instead, you need one of:
 
 **Node (recommended):**
 ```bash
@@ -126,6 +128,9 @@ is much easier to turn into a clean 3D mesh.
      ```bash
      python main.py --enable-cors-header "*"
      ```
+     This is also what makes the hosted app at `memory-palaces.github.io` able to
+     talk to your local ComfyUI: browsers allow an https page to reach `localhost`,
+     but only if ComfyUI answers with that CORS header.
   2. In ComfyUI, build a text-to-image graph and export it with **Save (API Format)**.
   3. Open **Settings (⚙)** → set the ComfyUI URL (default `http://127.0.0.1:8188`) and
      paste the API-format workflow. Keep the `{PROMPT}` and `{SEED}` placeholders, and

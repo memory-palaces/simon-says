@@ -14,6 +14,7 @@ import { loadDraft, saveDraft } from './model/autosave';
 import { History } from './model/history';
 import { GenerateDialog } from './ui/generateDialog';
 import { SettingsDialog } from './ui/settingsDialog';
+import { WelcomeDialog } from './ui/welcome';
 import { Toasts } from './ui/toasts';
 import { openGoToDialog, type GoToItem } from './ui/goToDialog';
 import { MeshPreview } from './ui/meshPreview';
@@ -78,6 +79,7 @@ class App {
     exit: () => this.endReview(),
   });
   private readonly toasts = new Toasts(this.mount);
+  private readonly welcome = new WelcomeDialog(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
   private readonly meshPreview = new MeshPreview();
   private readonly helpOverlay = new HelpOverlay(this.mount);
@@ -156,6 +158,7 @@ class App {
       newPalace: () => this.newPalace(),
       startReview: () => this.beginReview(),
       openSettings: () => this.settingsDialog.open(this.genConfig()),
+      openGuide: () => this.welcome.open(),
       openLog: () => this.toasts.openLog(),
       recenter: () => this.recenterView(),
       selectLocus: (id) => this.select(id),
@@ -260,7 +263,9 @@ class App {
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
     this.wireEvents();
-    this.boot();
+    void this.boot().finally(() => {
+      if (WelcomeDialog.wantedOnStartup()) this.welcome.open();
+    });
   }
 
   private async boot(): Promise<void> {
@@ -734,6 +739,11 @@ class App {
   // --- Walk-mode keys --------------------------------------------------------
 
   private onKeyDown(e: KeyboardEvent): void {
+    // While the guide is up, Esc closes it and nothing else reacts.
+    if (this.welcome.isOpen()) {
+      if (e.code === 'Escape') this.welcome.hide();
+      return;
+    }
     // Undo/redo, available in every mode. While the caret is in a text field, let
     // the browser's native text undo win instead of rewinding the whole palace.
     if (e.ctrlKey || e.metaKey) {

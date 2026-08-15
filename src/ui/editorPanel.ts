@@ -22,6 +22,7 @@ export interface EditorHandlers {
   newPalace(): void;
   startReview(): void;
   openSettings(): void;
+  openGuide(): void;
   openLog(): void;
   recenter(): void;
   selectLocus(id: string): void;
@@ -246,6 +247,10 @@ export class EditorPanel {
     const gear = button('⚙', '', () => this.handlers.openSettings());
     gear.title = 'Settings (keys, controls)';
     actions.appendChild(gear);
+
+    const guide = button('📖 Guide', '', () => this.handlers.openGuide());
+    guide.title = 'How to use Simon Says — the quick-start guide';
+    actions.appendChild(guide);
 
     const log = button('>_', '', () => this.handlers.openLog());
     log.title = 'Activity log / console';
