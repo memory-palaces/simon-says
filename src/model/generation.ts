@@ -94,6 +94,16 @@ export function applyStyle(prompt: string, styleId?: string): string {
   return buildPrompt(prompt, styleId);
 }
 
+/** Read a stored key for a key-only provider. */
+export function providerKey(id: string): string {
+  return loadGenerationSettings().keys?.[id]?.trim() ?? '';
+}
+
+/** Read the chosen model for a provider, or its default. */
+export function providerModel(id: string, fallback: string): string {
+  return loadGenerationSettings().models?.[id]?.trim() || fallback;
+}
+
 /** A tiny stable string hash (FNV-1a) for cache keys keyed on the prompt. */
 export function promptHash(prompt: string): string {
   let h = 0x811c9dc5;
@@ -366,9 +376,28 @@ const SETTINGS_KEY = 'simon-says:generation:v1';
 const LEGACY_SETTINGS_KEY = 'mempal:generation:v1'; // pre-rename key, migrated on first read
 
 /** App-global generation credentials. The pipeline CHOICE is per-world (in Palace). */
+/**
+ * Simple "paste an API key" providers. Each entry drives both the Settings UI and
+ * the backend that reads the key, so adding a provider is data + one backend class.
+ * Only providers that answer CORS preflights can appear here: this is a static
+ * browser app with no server to proxy through.
+ */
+export interface KeyProviderMeta {
+  id: string;
+  label: string;
+  /** Where the user gets a key. */
+  keyUrl: string;
+  /** Shown under the field; may contain HTML. */
+  hint: string;
+}
+
 export interface GenerationSettings {
   local?: LocalConfig;
   fal?: FalConfig;
+  /** API keys for the simple key-only providers, by provider id. */
+  keys?: Record<string, string>;
+  /** Per-provider model override, by provider id. */
+  models?: Record<string, string>;
   /** Rendering preamble prepended to every prompt; undefined = DEFAULT_PREAMBLE. */
   preamble?: string;
   /** Milliseconds for the go-to / recenter camera glide (0 = instant). */
