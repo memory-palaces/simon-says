@@ -24,3 +24,7 @@ dist/
 # Local secrets (e.g. GITHUB_PAT for gh)
 .env
 .env.*
+kanban/
+
+# The kanban-md binary is a 13 MB build artifact — install it yourself (see kanban/README.md)
+/bin/kanban-md
