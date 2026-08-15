@@ -30,3 +30,4 @@ kanban/activity.jsonl
 
 # The kanban-md binary is a 13 MB build artifact — install it yourself (see kanban/README.md)
 /bin/kanban-md
+kanban/.lock
