@@ -12,6 +12,7 @@ dist/
 # small default sample (virtualcity/) is tracked so a fresh clone renders instantly.
 /public/assets/samples/*
 !/public/assets/samples/virtualcity/
+!/public/assets/samples/street/
 /tmp-samples/
 
 # Personal, machine-local Claude Code permission grants (and atomic-write temp files)

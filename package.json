@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fetch-samples": "bash scripts/fetch-samples.sh",
+    "street": "node scripts/street/build.mjs",
     "electron": "npm run build && electron .",
     "electron:dev": "SIMON_DEV_URL=http://localhost:5173 electron ."
   },
@@ -19,6 +20,9 @@
     "three": "0.169.0"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/extensions": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
     "@types/three": "0.169.0",
     "electron": "33.0.2",
     "typescript": "5.6.3",

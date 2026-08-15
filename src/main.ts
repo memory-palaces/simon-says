@@ -62,7 +62,16 @@ import {
 } from './model/palace';
 
 // Bundled zero-config sample so the app renders the instant it's cloned.
-const DEFAULT_SPACE = { url: 'assets/samples/virtualcity/VirtualCity.glb', name: 'Virtual City (sample)' };
+// The starter world: a bright little neighbourhood baked from Kenney's CC0 kits
+// (scripts/street/build.mjs). Distinct, friendly landmarks are what loci stick to.
+const DEFAULT_SPACE = {
+  url: 'assets/samples/street/SimonsStreet.glb',
+  name: "Simon's Street (sample)",
+  environment: { background: '#dfeaf5', pattern: 'sky' } as const,
+  // Stand at the west end of the street looking east, so the first thing you see is
+  // the whole neighbourhood rather than one wall (metres, matching the GLB).
+  spawn: { position: [-8, 1.7, 0], lookAt: [30, 1.2, 0] } as const,
+};
 
 type Mode = 'edit' | 'walk' | 'review';
 
@@ -281,7 +290,17 @@ class App {
     // Restore an autosaved draft if one exists — never make the user start over
     // because of a refresh or crash.
     const draft = await loadDraft();
-    if (draft) {
+    // Exception: an untouched draft of a *bundled sample* (no loci, portals or decor,
+    // and the model is one of ours) is just "the app was opened once" — skip it so
+    // people always get the current starter world, not whichever sample shipped when
+    // they first visited.
+    const untouchedSample =
+      !!draft &&
+      draft.loci.length === 0 &&
+      (draft.portals?.length ?? 0) === 0 &&
+      (draft.decor?.length ?? 0) === 0 &&
+      draft.assets.every((a) => a.file.startsWith('assets/samples/'));
+    if (draft && !untouchedSample) {
       await this.adoptPalace(draft);
       // A restored draft was autosaved but never written to a file, so treat it as
       // unsaved: New/Load will offer to Save it first.
@@ -293,11 +312,16 @@ class App {
     try {
       await this.viewer.loadUrl(DEFAULT_SPACE.url);
       setAsset(this.palace, DEFAULT_SPACE.url);
+      this.palace.environment = { ...this.palace.environment, ...DEFAULT_SPACE.environment };
       this.viewer.applyEnvironment(this.palace.environment);
       this.loci.sync(this.palace);
       this.history.reset(this.root);
       this.setMode('edit');
-      if (this.viewer.hasModel) this.recenterView(false, true); // frame it, don't start buried inside
+      if (this.viewer.hasModel) {
+        const sp = DEFAULT_SPACE.spawn;
+        this.viewer.flyTo(new THREE.Vector3(...sp.position), new THREE.Vector3(...sp.lookAt), 0);
+        this.viewer.fp.setFlying(false); // stand on the road
+      }
     } catch (err) {
       console.error(err);
       this.overlay.showError(

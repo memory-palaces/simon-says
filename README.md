@@ -34,8 +34,10 @@ npm run dev            # then open the printed http://localhost:5173
 docker compose up      # then open http://localhost:5173
 ```
 
-A small sample space (**Virtual City**) is bundled, so it renders immediately. To
-also pull the iconic **Sponza** atrium (≈50 MB, fetched from the official Khronos
+Two sample spaces are bundled so it renders immediately: **Simon's Street** (the
+default — a bright little neighbourhood, see [Design your own town](#design-your-own-town-from-the-kenney-kits))
+and the sci-fi **Virtual City** (`public/assets/samples/virtualcity/`, drag it onto
+the window). To also pull the iconic **Sponza** atrium (≈50 MB, fetched from the official Khronos
 sample repo):
 ```bash
 npm run fetch-samples
@@ -119,6 +121,28 @@ else's server (read their retention terms if the space is your home).
 | **Desktop photogrammetry from photos** — [Meshroom](https://alicevision.org/#meshroom) (free, open source, needs an NVIDIA GPU) or [RealityCapture](https://www.capturingreality.com) (Epic, free under $1M revenue, Windows). Take 50–200 overlapping photos with any camera. | free | ✅ | Highest-quality private option. Slow, and you'll usually clean up in Blender (decimate + export GLB). |
 | **Professional capture** — [Matterport](https://matterport.com) and similar; download the mesh (Pro plans / MatterPak) and convert to GLB in Blender. | $$ | ❌ cloud | Whole houses, walk-through quality. Overkill for most, but great if it already exists (e.g. an estate-agent tour of a home you know). |
 | **AI-generated spaces** — text/image → 3D *scenes* is moving fast (e.g. World Labs' Marble). Check whether the tool exports a mesh (`.glb`); many produce Gaussian splats, which Simon Says can't walk yet. | varies | ❌ cloud | An imaginary place that never existed — surprisingly memorable, and nothing personal is uploaded. |
+
+### Design your own town from the Kenney kits
+
+The starter world, **Simon's Street**, is assembled from three of
+[Kenney](https://kenney.nl)'s CC0 kits — [City Kit (Suburban)](https://kenney.nl/assets/city-kit-suburban),
+[City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) and
+[City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial). Each ships as
+individual `.glb` pieces (houses, road tiles, trees, fences, shops), so you can lay
+out your *own* street — your childhood road, a fantasy village — and it stays as
+bright and readable as the sample. Ways to arrange the pieces, easiest first:
+
+| Editor | Cost | How |
+|---|---|---|
+| **[Asset Forge](https://kenney.nl/tools/asset-forge)** (Kenney's own tool, Win/Mac/Linux) | ~$20 | Built for exactly this: drop kit blocks on a snapping grid, paint, then *Export → GLB*. Comes with its own blocks; add the kits above as custom ones. |
+| **[Blender](https://www.blender.org)** | free | *File → Import → glTF 2.0* each piece you want (or *Edit → Preferences → File Paths → Asset Libraries* → add the kit's `GLB format` folder, then drag from the Asset Browser). Duplicate with `Shift+D`, hold `Ctrl` to snap, then *File → Export → glTF 2.0* the whole scene as one `.glb`. |
+| **[Godot 4](https://godotengine.org)** | free | Drop the `.glb` files into a project, drag them into a 3D scene (grid snap in the toolbar), then *Scene → Export As… → glTF 2.0 Scene*. |
+| **This repo's script** | free | `scripts/street/build.mjs` is the layout of Simon's Street as a plain list of `place(kit, piece, x, z, {rot, v})` lines. Copy it, edit the list, run `npm run street -- <folder-with-the-three-unzipped-kits> my-town.glb`. Colour variations (`v: 'a'|'b'|'c'` = blue / terracotta / grey roofs) come from the suburban kit's `Textures/` folder. |
+
+Whatever you use: keep everything in **one `.glb`**, Y-up, and scale so a house is
+about 7 m tall (the script multiplies Kenney's units by 6). Then just drag it onto
+the app. Distinct landmarks — a red house next to a blue one, a park, a tower — are
+what make loci easy to place and recall.
 
 Tips that apply to all of them:
 
@@ -226,6 +250,12 @@ Not yet: local (ComfyUI/TRELLIS) image→3D; nested child palaces; the baked-GLB
 in Addendum A.
 
 See `SPEC.md` for the full design and build order.
+
+## Credits
+
+- **Simon's Street** (default world) — built from [Kenney](https://kenney.nl) City Kits
+  (Suburban / Roads / Commercial), CC0. Thanks Kenney!
+- **Virtual City** and **Sponza** samples — [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets).
 
 ## License
 
