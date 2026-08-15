@@ -64,10 +64,17 @@ import {
 // Bundled zero-config sample so the app renders the instant it's cloned.
 // The starter world: a bright little neighbourhood baked from Kenney's CC0 kits
 // (scripts/street/build.mjs). Distinct, friendly landmarks are what loci stick to.
+/** Bundled sample spaces offered by New. The first is the starter world. */
+const SAMPLE_SPACES = [
+  { id: 'street', url: 'assets/samples/street/SimonsStreet.glb', label: "Simon's Street", sublabel: 'Bright neighbourhood — the starter world', environment: { background: '#dfeaf5', pattern: 'sky' } },
+  { id: 'virtualcity', url: 'assets/samples/virtualcity/VirtualCity.glb', label: 'Virtual City', sublabel: 'Sci-fi cityscape', environment: { background: DEFAULT_BACKGROUND } },
+] as const;
+
+const DEFAULT_SPACE_ID = 'street';
 const DEFAULT_SPACE = {
-  url: 'assets/samples/street/SimonsStreet.glb',
+  url: SAMPLE_SPACES[0].url,
   name: "Simon's Street (sample)",
-  environment: { background: '#dfeaf5', pattern: 'sky' } as const,
+  environment: SAMPLE_SPACES[0].environment,
   // Stand at the west end of the street looking east, so the first thing you see is
   // the whole neighbourhood rather than one wall (metres, matching the GLB).
   spawn: { position: [-8, 1.7, 0], lookAt: [30, 1.2, 0] } as const,
@@ -317,11 +324,7 @@ class App {
       this.loci.sync(this.palace);
       this.history.reset(this.root);
       this.setMode('edit');
-      if (this.viewer.hasModel) {
-        const sp = DEFAULT_SPACE.spawn;
-        this.viewer.flyTo(new THREE.Vector3(...sp.position), new THREE.Vector3(...sp.lookAt), 0);
-        this.viewer.fp.setFlying(false); // stand on the road
-      }
+      if (this.viewer.hasModel) this.spawnAtDefault();
     } catch (err) {
       console.error(err);
       this.overlay.showError(
@@ -329,6 +332,13 @@ class App {
           `You can still drag your own .glb onto the window.`,
       );
     }
+  }
+
+  /** Stand at the starter world's hand-picked spawn (west end of the street). */
+  private spawnAtDefault(): void {
+    const sp = DEFAULT_SPACE.spawn;
+    this.viewer.flyTo(new THREE.Vector3(...sp.position), new THREE.Vector3(...sp.lookAt), 0);
+    this.viewer.fp.setFlying(false); // stand on the road
   }
 
   // --- Mode machine ----------------------------------------------------------
@@ -1731,19 +1741,47 @@ class App {
 
   private async newPalace(): Promise<void> {
     if (!(await this.confirmDiscard('Start a new world?'))) return;
-    // A fresh palace gets a fresh name (not the previous one's) but keeps the model
-    // currently loaded so you can start placing loci right away.
+    // Which space should the fresh world use? Keeping the current model lets you
+    // restart your loci in the same place; the samples give you a clean start.
+    const choice = await chooseAction(this.mount, {
+      title: 'New world',
+      message: 'Which space do you want to start in?',
+      choices: [
+        { id: 'keep', label: 'Keep this space', sublabel: 'Same model, fresh empty route', variant: 'primary' },
+        ...SAMPLE_SPACES.map((s) => ({ id: s.id, label: s.label, sublabel: s.sublabel })),
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    });
+    if (choice === null || choice === 'cancel') return;
+    const sample = SAMPLE_SPACES.find((s) => s.id === choice);
+
+    // A fresh palace gets a fresh name (not the previous one's).
     this.palace = createEmptyPalace();
     this.root = this.palace;
     this.navStack = [];
     this.fileHandle = null;
     this.serverName = null; // a fresh world isn't bound to a saved file yet
-    setAsset(this.palace, this.viewer.assetFile);
     this.selectedId = null;
     this.editor.setNotice(null); // clear any stale "drag the geometry" message
+    if (sample) {
+      this.overlay.showLoading(sample.label);
+      try {
+        await this.viewer.loadUrl(sample.url);
+      } catch (err) {
+        console.error(err);
+        this.toasts.error(`Couldn't load ${sample.label}.`);
+      }
+      setAsset(this.palace, sample.url);
+      this.palace.environment = { ...this.palace.environment, ...sample.environment };
+      this.overlay.hide();
+    } else {
+      setAsset(this.palace, this.viewer.assetFile);
+    }
     this.viewer.applyEnvironment(this.palace.environment);
     this.loci.sync(this.palace);
     this.history.reset(this.root);
+    if (sample?.id === DEFAULT_SPACE_ID) this.spawnAtDefault();
+    else if (sample && this.viewer.hasModel) this.recenterView(false, true);
     this.markDirty();
     this.savedClean = true; // a fresh, empty palace has nothing unsaved to lose
     this.renderEditor();
