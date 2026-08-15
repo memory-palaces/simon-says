@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fetch-samples": "bash scripts/fetch-samples.sh",
-    "street": "node scripts/street/build.mjs",
+    "world": "node scripts/worlds/build.mjs",
     "electron": "npm run build && electron .",
     "electron:dev": "SIMON_DEV_URL=http://localhost:5173 electron ."
   },

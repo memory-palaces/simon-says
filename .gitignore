@@ -13,6 +13,9 @@ dist/
 /public/assets/samples/*
 !/public/assets/samples/virtualcity/
 !/public/assets/samples/street/
+!/public/assets/samples/cave/
+!/public/assets/samples/forest/
+!/public/assets/samples/dungeon/
 /tmp-samples/
 
 # Personal, machine-local Claude Code permission grants (and atomic-write temp files)

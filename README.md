@@ -34,10 +34,19 @@ npm run dev            # then open the printed http://localhost:5173
 docker compose up      # then open http://localhost:5173
 ```
 
-Two sample spaces are bundled so it renders immediately: **Simon's Street** (the
-default — a bright little neighbourhood, see [Design your own town](#design-your-own-town-from-the-kenney-kits))
-and the sci-fi **Virtual City** (`public/assets/samples/virtualcity/`, drag it onto
-the window). To also pull the iconic **Sponza** atrium (≈50 MB, fetched from the official Khronos
+Four sample worlds are bundled, so it renders immediately and **New** lets you
+switch between them:
+
+| World | What it is |
+|---|---|
+| **Simon's Street** (default) | A bright neighbourhood: houses, café, school, park, roundabout |
+| **Plato's Cave** | Cavern chambers, from the prisoners' cell past the fire out to daylight |
+| **Forest Camp** | A sunlit clearing: camp, archery range, lookout hut, bridge |
+| **The Dungeon** | An undercroft: entrance hall, barred cell, treasury, great room, stair down |
+
+The first four are built from Kenney CC0 kits by `scripts/worlds/` — see
+[Design your own town](#design-your-own-town-from-the-kenney-kits). The sci-fi
+**Virtual City** is bundled too (pick it under New). To also pull the iconic **Sponza** atrium (≈50 MB, fetched from the official Khronos
 sample repo):
 ```bash
 npm run fetch-samples
@@ -137,7 +146,12 @@ bright and readable as the sample. Ways to arrange the pieces, easiest first:
 | **[Asset Forge](https://kenney.nl/tools/asset-forge)** (Kenney's own tool, Win/Mac/Linux) | ~$20 | Built for exactly this: drop kit blocks on a snapping grid, paint, then *Export → GLB*. Comes with its own blocks; add the kits above as custom ones. |
 | **[Blender](https://www.blender.org)** | free | *File → Import → glTF 2.0* each piece you want (or *Edit → Preferences → File Paths → Asset Libraries* → add the kit's `GLB format` folder, then drag from the Asset Browser). Duplicate with `Shift+D`, hold `Ctrl` to snap, then *File → Export → glTF 2.0* the whole scene as one `.glb`. |
 | **[Godot 4](https://godotengine.org)** | free | Drop the `.glb` files into a project, drag them into a 3D scene (grid snap in the toolbar), then *Scene → Export As… → glTF 2.0 Scene*. |
-| **This repo's script** | free | `scripts/street/build.mjs` is the layout of Simon's Street as a plain list of `place(kit, piece, x, z, {rot, v})` lines. Copy it, edit the list, run `npm run street -- <folder-with-the-three-unzipped-kits> my-town.glb`. Colour variations (`v: 'a'|'b'|'c'` = blue / terracotta / grey roofs) come from the suburban kit's `Textures/` folder. |
+| **This repo's scripts** | free | `scripts/worlds/*.mjs` — each bundled world is a plain list of `w.place(kit, piece, x, z, {rot, v, s})` lines over a shared helper (`lib.mjs`). Copy `street.mjs` (or `cave.mjs` for interiors), edit the list, and run `npm run world -- <folder-with-the-unzipped-kits> street`. Colour variations (`v: 'a'|'b'|'c'` = blue / terracotta / grey roofs) come from a kit's `Textures/` folder. Two debugging aids: `node scripts/worlds/inspect.mjs "<kit>/Models/GLB format"` prints every piece's size, and `footprint.mjs <piece.glb>` draws an ASCII top-down map of its walls so you can see which side the doorway is on. |
+
+Two gotchas the bundled worlds hit, worth knowing before you lay out a grid: a
+Kenney `corridor` tile at rotation 0 runs **east-west** (its walls are on the north
+and south edges), and the modular room pieces are open on all four sides. When a
+corridor turns into a solid wall, it wants `rot: 90`.
 
 Whatever you use: keep everything in **one `.glb`**, Y-up, and scale so a house is
 about 7 m tall (the script multiplies Kenney's units by 6). Then just drag it onto
@@ -253,8 +267,9 @@ See `SPEC.md` for the full design and build order.
 
 ## Credits
 
-- **Simon's Street** (default world) — built from [Kenney](https://kenney.nl) City Kits
-  (Suburban / Roads / Commercial), CC0. Thanks Kenney!
+- **Simon's Street, Plato's Cave, Forest Camp, The Dungeon** — built from
+  [Kenney](https://kenney.nl)'s CC0 kits (City Kit Suburban / Roads / Commercial,
+  Modular Cave Kit, Mini Forest, Modular Dungeon Kit). Thanks Kenney!
 - **Virtual City** and **Sponza** samples — [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets).
 
 ## License

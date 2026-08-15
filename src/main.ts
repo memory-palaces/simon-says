@@ -57,6 +57,7 @@ import {
   type Locus,
   type Palace,
   type Portal,
+  type Environment,
   type SceneProp,
   type Vec3,
 } from './model/palace';
@@ -65,20 +66,43 @@ import {
 // The starter world: a bright little neighbourhood baked from Kenney's CC0 kits
 // (scripts/street/build.mjs). Distinct, friendly landmarks are what loci stick to.
 /** Bundled sample spaces offered by New. The first is the starter world. */
-const SAMPLE_SPACES = [
-  { id: 'street', url: 'assets/samples/street/SimonsStreet.glb', label: "Simon's Street", sublabel: 'Bright neighbourhood — the starter world', environment: { background: '#dfeaf5', pattern: 'sky' } },
-  { id: 'virtualcity', url: 'assets/samples/virtualcity/VirtualCity.glb', label: 'Virtual City', sublabel: 'Sci-fi cityscape', environment: { background: DEFAULT_BACKGROUND } },
-] as const;
+interface SampleSpace {
+  id: string;
+  url: string;
+  label: string;
+  sublabel: string;
+  environment: Environment;
+  /** Hand-picked starting spot (metres, matching the GLB); falls back to auto-recenter. */
+  spawn?: { position: [number, number, number]; lookAt: [number, number, number] };
+}
+const SAMPLE_SPACES: SampleSpace[] = [
+  {
+    id: 'street', url: 'assets/samples/street/SimonsStreet.glb', label: "Simon's Street", sublabel: 'Bright neighbourhood — the starter world',
+    environment: { background: '#dfeaf5', pattern: 'sky' },
+    spawn: { position: [-8, 1.7, 0], lookAt: [30, 1.2, 0] }, // west end, looking down the street
+  },
+  {
+    id: 'cave', url: 'assets/samples/cave/PlatosCave.glb', label: "Plato's Cave", sublabel: 'Cavern chambers, from the prisoners’ cell out to daylight',
+    environment: { background: '#0f0a09', brightness: 1.6 },
+    spawn: { position: [0, 1.7, -22], lookAt: [0, 1.5, 0] }, // in the cell, facing the bars
+  },
+  {
+    id: 'forest', url: 'assets/samples/forest/ForestCamp.glb', label: 'Forest Camp', sublabel: 'A sunlit clearing: camp, archery range, lookout, bridge',
+    environment: { background: '#dfeaf5', pattern: 'meadow' },
+    spawn: { position: [0, 1.7, -18], lookAt: [0, 1.6, 10] }, // south edge, looking into the clearing
+  },
+  {
+    id: 'dungeon', url: 'assets/samples/dungeon/Dungeon.glb', label: 'The Dungeon', sublabel: 'Undercroft: cell, treasury, great room and a stair down',
+    environment: { background: '#0b0b10', brightness: 1.7 },
+    spawn: { position: [0, 1.7, 22], lookAt: [0, 1.6, 0] }, // entrance hall, facing in
+  },
+  {
+    id: 'virtualcity', url: 'assets/samples/virtualcity/VirtualCity.glb', label: 'Virtual City', sublabel: 'Sci-fi cityscape',
+    environment: { background: DEFAULT_BACKGROUND },
+  },
+];
 
-const DEFAULT_SPACE_ID = 'street';
-const DEFAULT_SPACE = {
-  url: SAMPLE_SPACES[0].url,
-  name: "Simon's Street (sample)",
-  environment: SAMPLE_SPACES[0].environment,
-  // Stand at the west end of the street looking east, so the first thing you see is
-  // the whole neighbourhood rather than one wall (metres, matching the GLB).
-  spawn: { position: [-8, 1.7, 0], lookAt: [30, 1.2, 0] } as const,
-};
+const DEFAULT_SPACE = { ...SAMPLE_SPACES[0], name: "Simon's Street (sample)" };
 
 type Mode = 'edit' | 'walk' | 'review';
 
@@ -326,7 +350,7 @@ class App {
       this.loci.sync(this.palace);
       this.history.reset(this.root);
       this.setMode('edit');
-      if (this.viewer.hasModel) this.spawnAtDefault();
+      if (this.viewer.hasModel) this.spawnInSample(DEFAULT_SPACE);
     } catch (err) {
       console.error(err);
       this.overlay.showError(
@@ -336,11 +360,15 @@ class App {
     }
   }
 
-  /** Stand at the starter world's hand-picked spawn (west end of the street). */
-  private spawnAtDefault(): void {
-    const sp = DEFAULT_SPACE.spawn;
+  /** Stand at a sample world's hand-picked spawn, or auto-frame it if it has none. */
+  private spawnInSample(sample: SampleSpace): void {
+    const sp = sample.spawn;
+    if (!sp) {
+      this.recenterView(false, true);
+      return;
+    }
     this.viewer.flyTo(new THREE.Vector3(...sp.position), new THREE.Vector3(...sp.lookAt), 0);
-    this.viewer.fp.setFlying(false); // stand on the road
+    this.viewer.fp.setFlying(false); // stand on the floor
   }
 
   // --- Mode machine ----------------------------------------------------------
@@ -1789,8 +1817,7 @@ class App {
     this.viewer.applyEnvironment(this.palace.environment);
     this.loci.sync(this.palace);
     this.history.reset(this.root);
-    if (sample?.id === DEFAULT_SPACE_ID) this.spawnAtDefault();
-    else if (sample && this.viewer.hasModel) this.recenterView(false, true);
+    if (sample && this.viewer.hasModel) this.spawnInSample(sample);
     this.markDirty();
     this.savedClean = true; // a fresh, empty palace has nothing unsaved to lose
     this.renderEditor();
