@@ -24,7 +24,9 @@ dist/
 # Local secrets (e.g. GITHUB_PAT for gh)
 .env
 .env.*
-kanban/
+# The kanban board IS tracked — it's the public roadmap (see kanban/README.md).
+# Only the local activity log is noise.
+kanban/activity.jsonl
 
 # The kanban-md binary is a 13 MB build artifact — install it yourself (see kanban/README.md)
 /bin/kanban-md
