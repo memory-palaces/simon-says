@@ -62,10 +62,10 @@ The app has three modes: **walk** (first person), **edit** (the side panel), and
 **review**.
 
 **Build a palace**
-1. Click **▶ Walk** (or click the 3D view) to enter first person.
-2. Look at a wall or object and press **`E`** to drop a locus (a glowing numbered
+1. Click **▶ Enter** (or click the 3D view) to enter first person.
+2. Look at a wall or object and press **`T`** to drop a locus (a glowing numbered
    marker).
-3. Look at a marker and press **`X`** to delete or **`G`** to grab/move it. **Click**
+3. Look at a marker and press **`B`** to delete or **`G`** to grab/move it. **Click**
    a marker to jump straight to its editor.
 4. Press **`Esc`** to return to the panel. Click a locus to write its **location cue**
    and **your mnemonic image**. Reorder with ▲▼.
@@ -78,7 +78,8 @@ location, you recall the image, then press **Space** to reveal your own words.
 
 **Bring your own space**: drag any `.glb` / `.gltf` onto the window. If you already
 have loci it asks whether to start a new palace or keep them (for an updated model of
-the same space). Drag a saved `.json` to load a palace.
+the same space). Drag a saved `.json` to load a palace. See
+[Making your own world](#making-your-own-world) for where models come from.
 
 ### Controls
 
@@ -90,8 +91,47 @@ the same space). Drag a saved `.json` to load a palace.
 | Jump | `Space` |
 | Fly / no-clip (through walls) | `F` — then `Space` / `C` for up / down |
 | Recenter on the floor | `R` (or the ⌖ button) |
-| Drop / delete / move a locus | `E` / `X` / `G` |
+| Drop / delete / move a locus | `T` / `B` / `G` |
+| Drop a portal / go through it | `P` / `Enter` (aim at it) · `Q` returns |
+| World map / full cheat-sheet | `M` / `?` |
 | Undo / redo | `Ctrl/Cmd+Z` / `+Shift+Z` |
+
+---
+
+## Making your own world
+
+The best palace is a place you already know — your home, your street, your old
+school. Simon Says walks any **`.glb` / `.gltf`** file, so the question is just how to
+get one. It doesn't have to be pretty: a crude box-model of your flat works as well
+as a photoreal scan, because *you* supply the memories, the model only anchors them.
+
+Rough guide, cheapest-and-most-private first. "Private" means your photos/scans
+never leave your device; "cloud" means they're uploaded and processed on someone
+else's server (read their retention terms if the space is your home).
+
+| Route | Cost | Private? | What you get |
+|---|---|---|---|
+| **Use a free ready-made scene** — [Kenney](https://kenney.nl/assets?q=3d) kits (CC0), [Quaternius](https://quaternius.com) (CC0), [Poly Pizza](https://poly.pizza), [Sketchfab](https://sketchfab.com/search?features=downloadable&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) (filter *downloadable* + CC), Khronos samples (`npm run fetch-samples` pulls Sponza) | free | n/a | Instant. Not *your* place, but a vivid one — fine for a first palace. |
+| **Box-model it in Blender** — [Blender](https://www.blender.org) is free; block out rooms with cubes, colour the walls, *File → Export → glTF 2.0*. An hour gets you a recognisable floor plan of your home. | free | ✅ | Low-detail but exactly your layout, and it loads instantly. |
+| **Assemble from a kit in Blender** — import Kenney/Quaternius pieces (they ship as glTF/OBJ) and arrange a street or house, then export one `.glb`. | free | ✅ | Bright, cartoonish, as many *distinct locations* as you want. |
+| **Phone scan, processed on-device** — [Scaniverse](https://scaniverse.com) (iOS/Android, free, exports GLB); [3D Scanner App](https://3dscannerapp.com) (iOS, free, LiDAR iPhone/iPad, exports GLB/OBJ). | free | ✅ | A real scan of your real room in ~5 minutes. Rough edges, but unmistakably *your* place. |
+| **Phone scan, processed in the cloud** — [Polycam](https://poly.cam) (free tier limited; Pro for GLTF export), [Luma AI](https://lumalabs.ai), [KIRI Engine](https://www.kiriengine.app), [RealityScan](https://www.realityscan.com) (Epic, free). | free → ~$15/mo | ❌ cloud | Usually cleaner results than on-device, and works on more phones. Export GLB/GLTF (or OBJ → Blender → GLB). |
+| **Desktop photogrammetry from photos** — [Meshroom](https://alicevision.org/#meshroom) (free, open source, needs an NVIDIA GPU) or [RealityCapture](https://www.capturingreality.com) (Epic, free under $1M revenue, Windows). Take 50–200 overlapping photos with any camera. | free | ✅ | Highest-quality private option. Slow, and you'll usually clean up in Blender (decimate + export GLB). |
+| **Professional capture** — [Matterport](https://matterport.com) and similar; download the mesh (Pro plans / MatterPak) and convert to GLB in Blender. | $$ | ❌ cloud | Whole houses, walk-through quality. Overkill for most, but great if it already exists (e.g. an estate-agent tour of a home you know). |
+| **AI-generated spaces** — text/image → 3D *scenes* is moving fast (e.g. World Labs' Marble). Check whether the tool exports a mesh (`.glb`); many produce Gaussian splats, which Simon Says can't walk yet. | varies | ❌ cloud | An imaginary place that never existed — surprisingly memorable, and nothing personal is uploaded. |
+
+Tips that apply to all of them:
+
+- **Keep it light.** Under ~30 MB loads fast anywhere; scans easily blow past that.
+  In Blender: *Modifiers → Decimate* (ratio 0.1–0.3), and shrink textures to 2048px
+  before export. The app embeds the model in your saved `.json`, so size matters twice.
+- **Y is up, metres are metres.** glTF is Y-up; Blender's exporter handles that. If
+  you come out giant or tiny, the per-world *player scale* setting in the sidebar fixes it.
+- **Don't chase realism.** Distinct rooms, corners, furniture and colours are what
+  loci attach to. A crude model with ten obvious landmarks beats a photoreal one
+  that's all beige.
+- **Made something nice from CC0 parts?** Open a PR — a bright, friendly default
+  neighbourhood is on the wish-list.
 
 ---
 
