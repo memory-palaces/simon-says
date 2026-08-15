@@ -3,6 +3,8 @@ import {
   DEFAULT_LOCAL_URL,
   DEFAULT_LOCAL_WORKFLOW,
   type FalConfig,
+  DEFAULT_PREAMBLE,
+  buildPrompt,
   type LocalConfig,
 } from '../model/generation';
 
@@ -16,6 +18,8 @@ export interface SettingsHandlers {
   setFalConfig(apiKey: string, model: string): void;
   setLocalConfig(url: string, workflow: string): void;
   testLocal(): Promise<string>;
+  /** Persist the rendering preamble (empty string = none, undefined = the default). */
+  setPreamble(text: string | undefined): void;
 }
 
 export class SettingsDialog {
@@ -33,7 +37,7 @@ export class SettingsDialog {
     this.hide();
   }
 
-  open(config: { local?: LocalConfig; fal?: FalConfig }): void {
+  open(config: { local?: LocalConfig; fal?: FalConfig; preamble?: string }): void {
     this.root.replaceChildren(this.buildCard(config));
     this.root.style.display = 'flex';
   }
@@ -43,7 +47,7 @@ export class SettingsDialog {
     this.root.replaceChildren();
   }
 
-  private buildCard(config: { local?: LocalConfig; fal?: FalConfig }): HTMLElement {
+  private buildCard(config: { local?: LocalConfig; fal?: FalConfig; preamble?: string }): HTMLElement {
     const card = div('settings-card');
 
     const header = div('settings-header');
@@ -58,8 +62,63 @@ export class SettingsDialog {
     card.appendChild(header);
 
     card.appendChild(this.generationCreds(config));
+    card.appendChild(this.preambleSection(config.preamble));
     card.appendChild(this.controlsReference());
     return card;
+  }
+
+  /**
+   * The rendering preamble — shown in full, editable, resettable. It's prepended to
+   * every prompt, so people can put their whole palace in one visual language
+   * without retyping it on every locus.
+   */
+  private preambleSection(current: string | undefined): HTMLElement {
+    const wrap = div('settings-section');
+    wrap.appendChild(sectionTitle('Rendering preamble'));
+    const note = div('settings-note');
+    note.textContent =
+      'Sent in front of every mnemonic you render. It tells the model HOW to draw — your own words are always passed through unchanged.';
+    wrap.appendChild(note);
+
+    const area = document.createElement('textarea');
+    area.className = 'preamble-input';
+    area.rows = 4;
+    area.spellcheck = false;
+    area.value = current === undefined ? DEFAULT_PREAMBLE : current;
+    area.placeholder = 'No preamble — send my words alone.';
+
+    const preview = div('settings-hint preamble-preview');
+    const renderPreview = () => {
+      const text = buildPrompt('<your mnemonic>', 'none', area.value);
+      preview.textContent = `Sent: ${text}`;
+    };
+    area.oninput = () => {
+      this.handlers.setPreamble(area.value);
+      renderPreview();
+    };
+    renderPreview();
+    wrap.append(area, preview);
+
+    const row = div('settings-row');
+    const reset = document.createElement('button');
+    reset.className = 'btn';
+    reset.textContent = 'Reset to default';
+    reset.onclick = () => {
+      area.value = DEFAULT_PREAMBLE;
+      this.handlers.setPreamble(undefined);
+      renderPreview();
+    };
+    const clear = document.createElement('button');
+    clear.className = 'btn';
+    clear.textContent = 'Clear (send my words alone)';
+    clear.onclick = () => {
+      area.value = '';
+      this.handlers.setPreamble('');
+      renderPreview();
+    };
+    row.append(reset, clear);
+    wrap.appendChild(row);
+    return wrap;
   }
 
   private generationCreds(config: { local?: LocalConfig; fal?: FalConfig }): HTMLElement {

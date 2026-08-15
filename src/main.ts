@@ -22,7 +22,7 @@ import { HelpOverlay } from './ui/help';
 import { MapOverlay } from './ui/mapOverlay';
 import { chooseAction } from './ui/choice';
 import {
-  applyStyle,
+  buildPrompt,
   DEFAULT_FAL_MODEL,
   DEFAULT_LOCAL_URL,
   DEFAULT_LOCAL_WORKFLOW,
@@ -131,6 +131,7 @@ class App {
     setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
     testLocal: () => this.testLocal(),
+    setPreamble: (text) => this.setPreamble(text),
   });
 
   private genSettings: GenerationSettings = loadGenerationSettings();
@@ -1151,8 +1152,8 @@ class App {
     return [{ id: NONE_ID, label: 'None (text only)' }, ...listBackends().map((b) => ({ id: b.id, label: b.label }))];
   }
 
-  private genConfig(): { local?: LocalConfig; fal?: FalConfig } {
-    return { local: this.genSettings.local, fal: this.genSettings.fal };
+  private genConfig(): { local?: LocalConfig; fal?: FalConfig; preamble?: string } {
+    return { local: this.genSettings.local, fal: this.genSettings.fal, preamble: this.genSettings.preamble };
   }
 
   /** The pipeline THIS world uses (per-world, stored in the palace). */
@@ -1191,6 +1192,13 @@ class App {
 
   private setFalConfig(apiKey: string, model: string): void {
     this.genSettings = { ...this.genSettings, fal: { apiKey, model } };
+    saveGenerationSettings(this.genSettings);
+  }
+
+  /** Store the rendering preamble. `undefined` means "use the built-in default". */
+  private setPreamble(text: string | undefined): void {
+    this.genSettings = { ...this.genSettings, preamble: text };
+    if (text === undefined) delete this.genSettings.preamble;
     saveGenerationSettings(this.genSettings);
   }
 
@@ -1237,7 +1245,7 @@ class App {
       history = opts.current ? [opts.current] : [];
       this.sessionImages.set(opts.historyKey, history);
     }
-    const styledPrompt = applyStyle(opts.prompt, this.palace.generation?.style);
+    const styledPrompt = buildPrompt(opts.prompt, this.palace.generation?.style);
     this.generateDialog.open(opts.prompt, {
       variants: history,
       generate: (seed) => backend.generateImage(styledPrompt, seed),

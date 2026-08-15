@@ -11,6 +11,12 @@ Review mode walks the route and quizzes you.
 
 Runs entirely offline. No accounts, no cloud dependency, no telemetry.
 
+**Five worlds are built in** — pick one under **New**, or drag in your own `.glb`:
+**Simon's Street** (a bright neighbourhood), **Plato's Cave**, **Forest Camp**,
+**The Dungeon**, and the sci-fi **Virtual City**. Loci are text by default; you can
+render an image for each one with your own API key if you want (see
+[Image generation](#image-generation-optional)).
+
 > **Core principle:** *you* write the mnemonic image; the app only ever renders it.
 > The cognitive work of inventing a weird association is what makes a memory stick,
 > so the tool never auto-generates, suggests, or "improves" your wording.
@@ -34,8 +40,7 @@ npm run dev            # then open the printed http://localhost:5173
 docker compose up      # then open http://localhost:5173
 ```
 
-Four sample worlds are bundled, so it renders immediately and **New** lets you
-switch between them:
+The bundled worlds render immediately — **New** switches between them:
 
 | World | What it is |
 |---|---|
@@ -43,11 +48,10 @@ switch between them:
 | **Plato's Cave** | Cavern chambers, from the prisoners' cell past the fire out to daylight |
 | **Forest Camp** | A sunlit clearing: camp, archery range, lookout hut, bridge |
 | **The Dungeon** | An undercroft: entrance hall, barred cell, treasury, great room, stair down |
+| **Virtual City** | A sci-fi cityscape (the original sample) |
 
-The first four are built from Kenney CC0 kits by `scripts/worlds/` — see
-[Design your own town](#design-your-own-town-from-the-kenney-kits). The sci-fi
-**Virtual City** is bundled too (pick it under New). To also pull the iconic **Sponza** atrium (≈50 MB, fetched from the official Khronos
-sample repo):
+The first four are baked from Kenney CC0 kits by `scripts/worlds/`. To also pull the
+iconic **Sponza** atrium (≈50 MB, fetched from the official Khronos sample repo):
 ```bash
 npm run fetch-samples
 ```
@@ -110,70 +114,6 @@ the same space). Drag a saved `.json` to load a palace. See
 
 ---
 
-## Making your own world
-
-The best palace is a place you already know — your home, your street, your old
-school. Simon Says walks any **`.glb` / `.gltf`** file, so the question is just how to
-get one. It doesn't have to be pretty: a crude box-model of your flat works as well
-as a photoreal scan, because *you* supply the memories, the model only anchors them.
-
-Rough guide, cheapest-and-most-private first. "Private" means your photos/scans
-never leave your device; "cloud" means they're uploaded and processed on someone
-else's server (read their retention terms if the space is your home).
-
-| Route | Cost | Private? | What you get |
-|---|---|---|---|
-| **Use a free ready-made scene** — [Kenney](https://kenney.nl/assets?q=3d) kits (CC0), [Quaternius](https://quaternius.com) (CC0), [Poly Pizza](https://poly.pizza), [Sketchfab](https://sketchfab.com/search?features=downloadable&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) (filter *downloadable* + CC), Khronos samples (`npm run fetch-samples` pulls Sponza) | free | n/a | Instant. Not *your* place, but a vivid one — fine for a first palace. |
-| **Box-model it in Blender** — [Blender](https://www.blender.org) is free; block out rooms with cubes, colour the walls, *File → Export → glTF 2.0*. An hour gets you a recognisable floor plan of your home. | free | ✅ | Low-detail but exactly your layout, and it loads instantly. |
-| **Assemble from a kit in Blender** — import Kenney/Quaternius pieces (they ship as glTF/OBJ) and arrange a street or house, then export one `.glb`. | free | ✅ | Bright, cartoonish, as many *distinct locations* as you want. |
-| **Phone scan, processed on-device** — [Scaniverse](https://scaniverse.com) (iOS/Android, free, exports GLB); [3D Scanner App](https://3dscannerapp.com) (iOS, free, LiDAR iPhone/iPad, exports GLB/OBJ). | free | ✅ | A real scan of your real room in ~5 minutes. Rough edges, but unmistakably *your* place. |
-| **Phone scan, processed in the cloud** — [Polycam](https://poly.cam) (free tier limited; Pro for GLTF export), [Luma AI](https://lumalabs.ai), [KIRI Engine](https://www.kiriengine.app), [RealityScan](https://www.realityscan.com) (Epic, free). | free → ~$15/mo | ❌ cloud | Usually cleaner results than on-device, and works on more phones. Export GLB/GLTF (or OBJ → Blender → GLB). |
-| **Desktop photogrammetry from photos** — [Meshroom](https://alicevision.org/#meshroom) (free, open source, needs an NVIDIA GPU) or [RealityCapture](https://www.capturingreality.com) (Epic, free under $1M revenue, Windows). Take 50–200 overlapping photos with any camera. | free | ✅ | Highest-quality private option. Slow, and you'll usually clean up in Blender (decimate + export GLB). |
-| **Professional capture** — [Matterport](https://matterport.com) and similar; download the mesh (Pro plans / MatterPak) and convert to GLB in Blender. | $$ | ❌ cloud | Whole houses, walk-through quality. Overkill for most, but great if it already exists (e.g. an estate-agent tour of a home you know). |
-| **AI-generated spaces** — text/image → 3D *scenes* is moving fast (e.g. World Labs' Marble). Check whether the tool exports a mesh (`.glb`); many produce Gaussian splats, which Simon Says can't walk yet. | varies | ❌ cloud | An imaginary place that never existed — surprisingly memorable, and nothing personal is uploaded. |
-
-### Design your own town from the Kenney kits
-
-The starter world, **Simon's Street**, is assembled from three of
-[Kenney](https://kenney.nl)'s CC0 kits — [City Kit (Suburban)](https://kenney.nl/assets/city-kit-suburban),
-[City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) and
-[City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial). Each ships as
-individual `.glb` pieces (houses, road tiles, trees, fences, shops), so you can lay
-out your *own* street — your childhood road, a fantasy village — and it stays as
-bright and readable as the sample. Ways to arrange the pieces, easiest first:
-
-| Editor | Cost | How |
-|---|---|---|
-| **[Asset Forge](https://kenney.nl/tools/asset-forge)** (Kenney's own tool, Win/Mac/Linux) | ~$20 | Built for exactly this: drop kit blocks on a snapping grid, paint, then *Export → GLB*. Comes with its own blocks; add the kits above as custom ones. |
-| **[Blender](https://www.blender.org)** | free | *File → Import → glTF 2.0* each piece you want (or *Edit → Preferences → File Paths → Asset Libraries* → add the kit's `GLB format` folder, then drag from the Asset Browser). Duplicate with `Shift+D`, hold `Ctrl` to snap, then *File → Export → glTF 2.0* the whole scene as one `.glb`. |
-| **[Godot 4](https://godotengine.org)** | free | Drop the `.glb` files into a project, drag them into a 3D scene (grid snap in the toolbar), then *Scene → Export As… → glTF 2.0 Scene*. |
-| **This repo's scripts** | free | `scripts/worlds/*.mjs` — each bundled world is a plain list of `w.place(kit, piece, x, z, {rot, v, s})` lines over a shared helper (`lib.mjs`). Copy `street.mjs` (or `cave.mjs` for interiors), edit the list, and run `npm run world -- <folder-with-the-unzipped-kits> street`. Colour variations (`v: 'a'|'b'|'c'` = blue / terracotta / grey roofs) come from a kit's `Textures/` folder. Two debugging aids: `node scripts/worlds/inspect.mjs "<kit>/Models/GLB format"` prints every piece's size, and `footprint.mjs <piece.glb>` draws an ASCII top-down map of its walls so you can see which side the doorway is on. |
-
-Two gotchas the bundled worlds hit, worth knowing before you lay out a grid: a
-Kenney `corridor` tile at rotation 0 runs **east-west** (its walls are on the north
-and south edges), and the modular room pieces are open on all four sides. When a
-corridor turns into a solid wall, it wants `rot: 90`.
-
-Whatever you use: keep everything in **one `.glb`**, Y-up, and scale so a house is
-about 7 m tall (the script multiplies Kenney's units by 6). Then just drag it onto
-the app. Distinct landmarks — a red house next to a blue one, a park, a tower — are
-what make loci easy to place and recall.
-
-Tips that apply to all of them:
-
-- **Keep it light.** Under ~30 MB loads fast anywhere; scans easily blow past that.
-  In Blender: *Modifiers → Decimate* (ratio 0.1–0.3), and shrink textures to 2048px
-  before export. The app embeds the model in your saved `.json`, so size matters twice.
-- **Y is up, metres are metres.** glTF is Y-up; Blender's exporter handles that. If
-  you come out giant or tiny, the per-world *player scale* setting in the sidebar fixes it.
-- **Don't chase realism.** Distinct rooms, corners, furniture and colours are what
-  loci attach to. A crude model with ten obvious landmarks beats a photoreal one
-  that's all beige.
-- **Made something nice from CC0 parts?** Open a PR — a bright, friendly default
-  neighbourhood is on the wish-list.
-
----
-
 ## Image generation (optional)
 
 A locus works perfectly with just typed text. If you want a rendered image (and,
@@ -225,6 +165,85 @@ is much easier to turn into a clean 3D mesh.
 1. Type a description → **Render image** → approve or **Reroll** (every render is kept
    in a session history you can page through).
 2. Only after approving → **Make 3D** → the mesh appears at the locus.
+
+---
+
+## Making your own world
+
+The best palace is a place you already know — your home, your street, your old
+school. Simon Says walks any **`.glb` / `.gltf`** file, so the question is just how to
+get one. It doesn't have to be pretty: a crude box-model of your flat works as well
+as a photoreal scan, because *you* supply the memories, the model only anchors them.
+
+Short answer: **free ready-made scenes** ([Kenney](https://kenney.nl/assets?q=3d),
+[Quaternius](https://quaternius.com), [Poly Pizza](https://poly.pizza)) to start,
+**Blender** to block out your own place for free and privately, or a **phone scan**
+(Scaniverse / 3D Scanner App keep it on-device; Polycam / Luma / KIRI are cloud).
+The full comparison, and how to assemble a town from kit pieces, is below.
+
+<details>
+<summary><b>All the routes, cheapest-and-most-private first</b> — "private" means your
+photos never leave your device; "cloud" means they're processed on someone else's
+server (read their retention terms if the space is your home).</summary>
+
+| Route | Cost | Private? | What you get |
+|---|---|---|---|
+| **Use a free ready-made scene** — [Kenney](https://kenney.nl/assets?q=3d) kits (CC0), [Quaternius](https://quaternius.com) (CC0), [Poly Pizza](https://poly.pizza), [Sketchfab](https://sketchfab.com/search?features=downloadable&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) (filter *downloadable* + CC), Khronos samples (`npm run fetch-samples` pulls Sponza) | free | n/a | Instant. Not *your* place, but a vivid one — fine for a first palace. |
+| **Box-model it in Blender** — [Blender](https://www.blender.org) is free; block out rooms with cubes, colour the walls, *File → Export → glTF 2.0*. An hour gets you a recognisable floor plan of your home. | free | ✅ | Low-detail but exactly your layout, and it loads instantly. |
+| **Assemble from a kit in Blender** — import Kenney/Quaternius pieces (they ship as glTF/OBJ) and arrange a street or house, then export one `.glb`. | free | ✅ | Bright, cartoonish, as many *distinct locations* as you want. |
+| **Phone scan, processed on-device** — [Scaniverse](https://scaniverse.com) (iOS/Android, free, exports GLB); [3D Scanner App](https://3dscannerapp.com) (iOS, free, LiDAR iPhone/iPad, exports GLB/OBJ). | free | ✅ | A real scan of your real room in ~5 minutes. Rough edges, but unmistakably *your* place. |
+| **Phone scan, processed in the cloud** — [Polycam](https://poly.cam) (free tier limited; Pro for GLTF export), [Luma AI](https://lumalabs.ai), [KIRI Engine](https://www.kiriengine.app), [RealityScan](https://www.realityscan.com) (Epic, free). | free → ~$15/mo | ❌ cloud | Usually cleaner results than on-device, and works on more phones. Export GLB/GLTF (or OBJ → Blender → GLB). |
+| **Desktop photogrammetry from photos** — [Meshroom](https://alicevision.org/#meshroom) (free, open source, needs an NVIDIA GPU) or [RealityCapture](https://www.capturingreality.com) (Epic, free under $1M revenue, Windows). Take 50–200 overlapping photos with any camera. | free | ✅ | Highest-quality private option. Slow, and you'll usually clean up in Blender (decimate + export GLB). |
+| **Professional capture** — [Matterport](https://matterport.com) and similar; download the mesh (Pro plans / MatterPak) and convert to GLB in Blender. | $$ | ❌ cloud | Whole houses, walk-through quality. Overkill for most, but great if it already exists (e.g. an estate-agent tour of a home you know). |
+| **AI-generated spaces** — text/image → 3D *scenes* is moving fast (e.g. World Labs' Marble). Check whether the tool exports a mesh (`.glb`); many produce Gaussian splats, which Simon Says can't walk yet. | varies | ❌ cloud | An imaginary place that never existed — surprisingly memorable, and nothing personal is uploaded. |
+
+</details>
+
+<details>
+<summary><b>Design your own town from the Kenney kits</b> — how the bundled worlds
+were made, and the editors you can use to make your own.</summary>
+
+### Design your own town from the Kenney kits
+
+The starter world, **Simon's Street**, is assembled from three of
+[Kenney](https://kenney.nl)'s CC0 kits — [City Kit (Suburban)](https://kenney.nl/assets/city-kit-suburban),
+[City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) and
+[City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial). Each ships as
+individual `.glb` pieces (houses, road tiles, trees, fences, shops), so you can lay
+out your *own* street — your childhood road, a fantasy village — and it stays as
+bright and readable as the sample. Ways to arrange the pieces, easiest first:
+
+| Editor | Cost | How |
+|---|---|---|
+| **[Asset Forge](https://kenney.nl/tools/asset-forge)** (Kenney's own tool, Win/Mac/Linux) | ~$20 | Built for exactly this: drop kit blocks on a snapping grid, paint, then *Export → GLB*. Comes with its own blocks; add the kits above as custom ones. |
+| **[Blender](https://www.blender.org)** | free | *File → Import → glTF 2.0* each piece you want (or *Edit → Preferences → File Paths → Asset Libraries* → add the kit's `GLB format` folder, then drag from the Asset Browser). Duplicate with `Shift+D`, hold `Ctrl` to snap, then *File → Export → glTF 2.0* the whole scene as one `.glb`. |
+| **[Godot 4](https://godotengine.org)** | free | Drop the `.glb` files into a project, drag them into a 3D scene (grid snap in the toolbar), then *Scene → Export As… → glTF 2.0 Scene*. |
+| **This repo's scripts** | free | `scripts/worlds/*.mjs` — each bundled world is a plain list of `w.place(kit, piece, x, z, {rot, v, s})` lines over a shared helper (`lib.mjs`). Copy `street.mjs` (or `cave.mjs` for interiors), edit the list, and run `npm run world -- <folder-with-the-unzipped-kits> street`. Colour variations (`v: 'a'|'b'|'c'` = blue / terracotta / grey roofs) come from a kit's `Textures/` folder. Two debugging aids: `node scripts/worlds/inspect.mjs "<kit>/Models/GLB format"` prints every piece's size, and `footprint.mjs <piece.glb>` draws an ASCII top-down map of its walls so you can see which side the doorway is on. |
+
+Two gotchas the bundled worlds hit, worth knowing before you lay out a grid: a
+Kenney `corridor` tile at rotation 0 runs **east-west** (its walls are on the north
+and south edges), and the modular room pieces are open on all four sides. When a
+corridor turns into a solid wall, it wants `rot: 90`.
+
+Whatever you use: keep everything in **one `.glb`**, Y-up, and scale so a house is
+about 7 m tall (the script multiplies Kenney's units by 6). Then just drag it onto
+the app. Distinct landmarks — a red house next to a blue one, a park, a tower — are
+what make loci easy to place and recall.
+
+Tips that apply to all of them:
+
+- **Keep it light.** Under ~30 MB loads fast anywhere; scans easily blow past that.
+  In Blender: *Modifiers → Decimate* (ratio 0.1–0.3), and shrink textures to 2048px
+  before export. The app embeds the model in your saved `.json`, so size matters twice.
+- **Y is up, metres are metres.** glTF is Y-up; Blender's exporter handles that. If
+  you come out giant or tiny, the per-world *player scale* setting in the sidebar fixes it.
+- **Don't chase realism.** Distinct rooms, corners, furniture and colours are what
+  loci attach to. A crude model with ten obvious landmarks beats a photoreal one
+  that's all beige.
+- **Made something nice from CC0 parts?** Open a PR — more starter worlds are
+  welcome.
+
+</details>
 
 ---
 

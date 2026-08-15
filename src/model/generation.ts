@@ -62,10 +62,36 @@ export const FAL_MODEL_PRESETS: Array<{ id: string; label: string }> = [
   { id: 'fal-ai/flux-pro/v1.1', label: 'Flux Pro 1.1' },
 ];
 
-/** Append the chosen style's suffix to the prompt (the words themselves are untouched). */
-export function applyStyle(prompt: string, styleId?: string): string {
+/**
+ * The editable rendering preamble. It goes IN FRONT of the user's mnemonic on every
+ * render — a standing instruction to the image model about *how* to draw, never
+ * about *what* to draw. The mnemonic itself is still passed through verbatim; this
+ * is the knob for people who want their whole palace in one visual language.
+ * Editable (and resettable) in Settings, stored in this browser.
+ */
+export const DEFAULT_PREAMBLE =
+  'A vivid, memorable mnemonic illustration for a memory palace. Make the subject unmistakable and a little absurd, ' +
+  'with strong silhouettes and high contrast so it is easy to recall. Depict exactly what is described, nothing more:';
+
+/** The preamble in force (falls back to the default when unset). */
+export function activePreamble(): string {
+  const stored = loadGenerationSettings().preamble;
+  return stored === undefined ? DEFAULT_PREAMBLE : stored;
+}
+
+/**
+ * Assemble what actually gets sent: [preamble] + the user's words + [style suffix].
+ * The user's words are never edited — only framed.
+ */
+export function buildPrompt(prompt: string, styleId?: string, preamble = activePreamble()): string {
   const preset = STYLE_PRESETS.find((p) => p.id === styleId);
-  return preset && preset.suffix ? `${prompt}${preset.suffix}` : prompt;
+  const head = preamble.trim() ? `${preamble.trim()} ` : '';
+  return `${head}${prompt}${preset?.suffix ?? ''}`;
+}
+
+/** @deprecated use buildPrompt — kept so older call sites keep compiling. */
+export function applyStyle(prompt: string, styleId?: string): string {
+  return buildPrompt(prompt, styleId);
 }
 
 /** A tiny stable string hash (FNV-1a) for cache keys keyed on the prompt. */
@@ -343,6 +369,8 @@ const LEGACY_SETTINGS_KEY = 'mempal:generation:v1'; // pre-rename key, migrated 
 export interface GenerationSettings {
   local?: LocalConfig;
   fal?: FalConfig;
+  /** Rendering preamble prepended to every prompt; undefined = DEFAULT_PREAMBLE. */
+  preamble?: string;
   /** Milliseconds for the go-to / recenter camera glide (0 = instant). */
   transitionMs?: number;
 }

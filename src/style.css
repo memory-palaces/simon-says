@@ -1611,3 +1611,17 @@ canvas {
 canvas.picking {
   cursor: crosshair;
 }
+
+/* Rendering preamble editor (Settings). */
+.preamble-input {
+  width: 100%;
+  resize: vertical;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.preamble-preview {
+  margin-top: 6px;
+  opacity: 0.8;
+  font-style: italic;
+  word-break: break-word;
+}
