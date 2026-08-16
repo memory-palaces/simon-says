@@ -1681,3 +1681,37 @@ canvas.picking {
   font-size: 14px;
   font-weight: 650;
 }
+
+/* One collapsible group for everything that configures the current world. */
+.world-settings {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+.world-settings-head {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  text-align: left;
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ui-dim);
+}
+.world-settings-head:hover {
+  color: var(--ui-fg);
+}
+.world-settings-body {
+  display: none;
+}
+.world-settings-body.open {
+  display: block;
+}
+
+/* Buttons that should stay on one line together inside a wrapping row. */
+.btn-group {
+  display: flex;
+  gap: 8px;
+}

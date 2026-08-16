@@ -114,8 +114,19 @@ export interface EditorHandlers {
  * text. There is deliberately NO "suggest" or "improve" affordance: inventing the
  * bizarre association is the user's job; the machine only ever renders it.
  */
+/** Remembered open/closed state of the World settings disclosure. */
+const WORLD_SETTINGS_KEY = 'simon-says:ui:world-settings';
+
 export class EditorPanel {
   private readonly root: HTMLElement;
+  /** Default open: the knobs are worth finding once, then you fold them away. */
+  private worldSettingsOpen = (() => {
+    try {
+      return localStorage.getItem(WORLD_SETTINGS_KEY) !== 'closed';
+    } catch {
+      return true;
+    }
+  })();
   private readonly handlers: EditorHandlers;
 
   // Live references so typing in the detail fields doesn't force a full re-render
@@ -238,7 +249,7 @@ export class EditorPanel {
       exp.title = 'Download this world as a .json file (to share or back up)';
       // New sits with Save/Open (both are "which world am I in"); the file-transfer
       // pair goes after the separator, so a wrap breaks between the two ideas.
-      rowFile.append(save, open, button('New', '', () => this.handlers.newPalace()), sep(), imp, exp);
+      rowFile.append(btnGroup(save, open, button('New', '', () => this.handlers.newPalace())), sep(), btnGroup(imp, exp));
     } else {
       const save = button('Save', '', () => this.handlers.save());
       save.title = 'Download this world as a .json file';
@@ -280,12 +291,12 @@ export class EditorPanel {
     help.title = 'Show / hide the controls cheat-sheet (?)';
     rowUtil.appendChild(help);
 
-    const guide = button('📖 Guide', '', () => this.handlers.openGuide());
-    guide.title = 'How to use Simon Says — the quick-start guide';
+    const guide = button('📖 Quick start', '', () => this.handlers.openGuide());
+    guide.title = 'The quick-start guide: the usual flow and the keys you need';
     rowUtil.appendChild(guide);
 
-    const gear = button('⚙', '', () => this.handlers.openSettings());
-    gear.title = 'Settings — API keys, rendering preamble, controls';
+    const gear = button('⚙ App settings', '', () => this.handlers.openSettings());
+    gear.title = 'Settings shared by every world — API keys, rendering preamble, controls';
     rowUtil.appendChild(gear);
 
     const log = button('>_', '', () => this.handlers.openLog());
@@ -371,18 +382,14 @@ export class EditorPanel {
     }
     this.root.appendChild(list);
 
-    // --- Show / hide the floating text (right under the route it applies to) ----
-    this.root.appendChild(this.textSection(palace));
-
     // --- Portals to other worlds -----------------------------------------------
     this.root.appendChild(this.portalsSection(palace));
 
     // --- Free-standing decor (ambiance not tied to any locus) ------------------
     this.root.appendChild(this.decorSection(palace));
 
-    // --- This world: image pipeline + background -------------------------------
-    this.root.appendChild(this.generationSection());
-    this.root.appendChild(this.worldSection(palace));
+    // --- Everything that configures THIS world, in one collapsible group -------
+    this.root.appendChild(this.worldSettingsSection(palace));
   }
 
   /** Manage free-standing decor: elements placed for ambiance, no locus attached. */
@@ -495,6 +502,40 @@ export class EditorPanel {
       });
     }
     return card;
+  }
+
+  /**
+   * All the per-world knobs in one place — text, image pipeline, background —
+   * behind a single disclosure, so the panel's default shape is "your route" and
+   * not "a settings screen". Open/closed is remembered between sessions.
+   */
+  private worldSettingsSection(palace: Palace): HTMLElement {
+    const wrap = div('world-settings');
+    const head = document.createElement('button');
+    head.className = 'world-settings-head';
+    const setLabel = () => {
+      head.textContent = `${this.worldSettingsOpen ? '▾' : '▸'} World settings`;
+    };
+    head.onclick = () => {
+      this.worldSettingsOpen = !this.worldSettingsOpen;
+      try {
+        localStorage.setItem(WORLD_SETTINGS_KEY, this.worldSettingsOpen ? 'open' : 'closed');
+      } catch {
+        /* a private-mode browser can refuse; the panel still works */
+      }
+      setLabel();
+      body.classList.toggle('open', this.worldSettingsOpen);
+    };
+    setLabel();
+
+    const body = div('world-settings-body');
+    body.classList.toggle('open', this.worldSettingsOpen);
+    body.appendChild(this.textSection(palace));
+    body.appendChild(this.generationSection());
+    body.appendChild(this.worldSection(palace));
+
+    wrap.append(head, body);
+    return wrap;
   }
 
   /**
@@ -1289,6 +1330,13 @@ function make3dButton(pending: Set<string>, key: string, hasMesh: boolean, onCli
 }
 
 /** A labelled checkbox row (used by the world-settings toggles). */
+/** Keep a handful of buttons on one line — wrapping happens between groups. */
+function btnGroup(...buttons: HTMLElement[]): HTMLElement {
+  const g = div('btn-group');
+  g.append(...buttons);
+  return g;
+}
+
 function checkRow(label: string, title: string, checked: boolean, onChange: (on: boolean) => void): HTMLElement {
   const row = document.createElement('label');
   row.className = 'check-row';
