@@ -49,6 +49,44 @@ export type SaveOutcome =
  * Save the palace. With a `handle`, writes back to that file silently (real save).
  * Otherwise prompts (Save As); falls back to a download when the API is missing.
  */
+/** True when this asset reference is a URL we could fetch (not already inline). */
+export function isUrlAsset(file: string): boolean {
+  return !!file && !file.startsWith('data:');
+}
+
+/**
+ * The palace as it should be written to disk. When `environment.embedAssets` is on
+ * and the world's geometry is a URL, the GLB is fetched and inlined so the file is
+ * self-contained; otherwise the reference is kept and the file stays small. Never
+ * mutates the live palace.
+ */
+export async function palaceForExport(palace: Palace): Promise<Palace> {
+  if (!palace.environment?.embedAssets) return palace;
+  const pending = palace.assets.filter((a) => isUrlAsset(a.file));
+  if (pending.length === 0) return palace;
+  const copy: Palace = { ...palace, assets: palace.assets.map((a) => ({ ...a })) };
+  for (const asset of copy.assets) {
+    if (!isUrlAsset(asset.file)) continue;
+    try {
+      const res = await fetch(new URL(asset.file, window.location.href).toString());
+      if (!res.ok) throw new Error(String(res.status));
+      asset.file = await blobToDataUrl(await res.blob());
+    } catch {
+      // Keep the URL rather than writing a broken palace; the caller warns.
+    }
+  }
+  return copy;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function savePalace(palace: Palace, handle: FileSystemFileHandle | null): Promise<SaveOutcome> {
   const json = JSON.stringify(palace, null, 2);
   const w = window as PickerWindow;

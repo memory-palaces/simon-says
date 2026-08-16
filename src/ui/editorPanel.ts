@@ -44,6 +44,10 @@ export interface EditorHandlers {
   setCueLabels(on: boolean): void;
   /** Cycle the in-world text: cue + mnemonic → cue only → none (same as L). */
   cycleLabels(): void;
+  /** Point this world at a different GLB URL, keeping the loci where they are. */
+  setWorldUrl(url: string): void;
+  /** Inline the GLB into saved/exported .json (only meaningful for URL worlds). */
+  setEmbedAssets(on: boolean): void;
   /** Show / hide the controls cheat-sheet (same as ?). */
   toggleHelp(): void;
   toggleScaleFigure(): void;
@@ -531,11 +535,65 @@ export class EditorPanel {
 
     const body = div('world-settings-body');
     body.classList.toggle('open', this.worldSettingsOpen);
+    body.appendChild(this.geometrySection(palace));
     body.appendChild(this.textSection(palace));
     body.appendChild(this.generationSection());
     body.appendChild(this.worldSection(palace));
 
     wrap.append(head, body);
+    return wrap;
+  }
+
+  /**
+   * Where this world's geometry comes from. A URL keeps the palace tiny (a few KB)
+   * and lets other people load the same world; an uploaded model has nowhere else
+   * to live, so it's embedded and the file is large either way.
+   */
+  private geometrySection(palace: Palace): HTMLElement {
+    const wrap = div('editor-world');
+    const title = div('ctrl-title');
+    title.textContent = 'World geometry';
+    wrap.appendChild(title);
+
+    const asset = palace.assets[0];
+    const file = asset?.file ?? '';
+    const embedded = file.startsWith('data:');
+
+    if (embedded) {
+      const note = div('settings-note');
+      note.textContent = 'This world is an uploaded model, embedded in the palace. Paste a URL below to reference one instead.';
+      wrap.appendChild(note);
+    }
+
+    const row = div('settings-row');
+    const input = document.createElement('input');
+    input.type = 'url';
+    input.className = 'world-url-input';
+    input.placeholder = 'https://…/world.glb';
+    input.value = embedded ? '' : file;
+    const apply = button('Load', '', () => this.handlers.setWorldUrl(input.value));
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') this.handlers.setWorldUrl(input.value);
+    };
+    row.append(input, apply);
+    wrap.appendChild(row);
+
+    const hint = div('settings-hint');
+    hint.innerHTML = embedded
+      ? 'Swapping geometry keeps your loci at their coordinates — only sensible if the new model has the same layout.'
+      : 'Publishing your world in a <b>GitHub</b> repo works well (<code>raw.githubusercontent.com</code> links allow cross-origin loads). Loci keep their coordinates when you swap.';
+    wrap.appendChild(hint);
+
+    if (!embedded && file) {
+      wrap.appendChild(
+        checkRow(
+          'Embed the model in saved / exported .json',
+          'Makes the file self-contained but megabytes rather than kilobytes. Off keeps the URL reference.',
+          palace.environment?.embedAssets === true,
+          (on) => this.handlers.setEmbedAssets(on),
+        ),
+      );
+    }
     return wrap;
   }
 

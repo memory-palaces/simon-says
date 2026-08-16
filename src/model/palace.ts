@@ -255,6 +255,14 @@ export interface Environment {
    * the only text a palace has before anyone sets up image generation.
    */
   cueLabels?: boolean;
+  /**
+   * Inline the world's GLB into saved/exported .json instead of keeping the URL
+   * reference. Off by default: a palace built on a world that lives at a URL is a
+   * few KB, while embedding the geometry makes it megabytes. Only meaningful when
+   * the asset IS a URL — an uploaded model has nowhere else to live, so it is
+   * always embedded.
+   */
+  embedAssets?: boolean;
 }
 
 /** Cheerful vertical-gradient sky presets (top -> horizon). */

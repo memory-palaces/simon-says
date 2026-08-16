@@ -247,6 +247,25 @@ export class Viewer {
     };
   }
 
+  /**
+   * Stand outside the model looking at its centre. `recenter()` drops you at the
+   * bounds centre, which is right for a building you're meant to be inside but
+   * leaves you buried in the terrain of an unknown world — this is the safe default
+   * when someone loads a .glb we know nothing about.
+   */
+  frameModel(): void {
+    if (!this.currentModel) return;
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const centre = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const span = Math.max(size.x, size.z, 1);
+    const dir = new THREE.Vector3(0.6, 0, 1).normalize();
+    const pos = centre.clone().addScaledVector(dir, span * 0.9);
+    pos.y = box.max.y + Math.max(size.y * 0.35, 2);
+    this.fp.setFlying(true); // hovering outside: nothing to stand on out here
+    this.flyTo(pos, centre, 0);
+  }
+
   /** Raycast through a screen point (CSS pixels) onto the geometry. */
   raycastScreen(clientX: number, clientY: number): SurfaceHit | null {
     if (!this.currentModel) return null;

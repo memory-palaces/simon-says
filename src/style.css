@@ -1715,3 +1715,48 @@ canvas.picking {
   display: flex;
   gap: 8px;
 }
+
+/* New-world picker: stacked choices, each with its source URL. */
+.new-world-card {
+  width: min(560px, 94vw);
+}
+.choice-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  color: var(--ui-fg);
+  cursor: pointer;
+}
+.choice-btn:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+.choice-btn.primary {
+  border-color: var(--ui-accent);
+}
+.choice-btn b {
+  display: block;
+  font-size: 13.5px;
+}
+.choice-btn span {
+  display: block;
+  font-size: 12px;
+  color: var(--ui-dim);
+  margin-top: 2px;
+}
+.choice-url {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--ui-dim);
+  opacity: 0.75;
+  word-break: break-all;
+}
+.world-url-input {
+  flex: 1;
+  min-width: 0;
+}

@@ -95,7 +95,17 @@ sideways/vertical). `X` toggles x-ray if you'd rather see everything through wal
 **Review**: click **Review ▸** to walk the route in order — each stop shows the
 location, you recall the image, then press **Space** to reveal your own words.
 
-**Bring your own space**: drag any `.glb` / `.gltf` onto the window. If you already
+**Bring your own space**: **New** offers the built-in worlds (each showing the URL
+it lives at), a box for **any GLB URL**, or a file from your computer. A URL world
+is *referenced*, not embedded, so the palace stays a few KB — publishing a `.glb` in
+a GitHub repo and sharing the `raw.githubusercontent.com` link is the easy path, and
+GitHub Pages links work too. Under **World settings → World geometry** you can swap
+the URL later (loci keep their coordinates) and tick **Embed the model in saved /
+exported .json** if you'd rather the file be self-contained — off by default,
+because embedding turns kilobytes into megabytes. An uploaded model has no URL to
+point at, so it is always embedded.
+
+You can also drag any `.glb` / `.gltf` onto the window. If you already
 have loci it asks whether to start a new palace or keep them (for an updated model of
 the same space). Drag a saved `.json` to load a palace. See
 [Making your own world](#making-your-own-world) for where models come from.

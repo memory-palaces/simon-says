@@ -6,7 +6,7 @@ import { LociLayer } from './engine/Loci';
 import { Overlay } from './ui/overlay';
 import { EditorPanel } from './ui/editorPanel';
 import { ReviewOverlay } from './ui/review';
-import { openPalace, readPalaceFile, savePalace } from './model/persistence';
+import { openPalace, palaceForExport, readPalaceFile, savePalace } from './model/persistence';
 import { listServerPalaces, loadServerPalace, saveServerPalace, serverInfo } from './model/server';
 import { collectAssets, replaceAssetEverywhere, type AssetRef } from './model/assets';
 import { openAssetManager } from './ui/assetManager';
@@ -18,6 +18,7 @@ import { WelcomeDialog } from './ui/welcome';
 import { Toasts } from './ui/toasts';
 import { openGoToDialog, type GoToItem } from './ui/goToDialog';
 import { MeshPreview } from './ui/meshPreview';
+import { chooseNewWorld } from './ui/newWorldDialog';
 import { HelpOverlay } from './ui/help';
 import { MapOverlay } from './ui/mapOverlay';
 import { chooseAction } from './ui/choice';
@@ -104,6 +105,12 @@ const SAMPLE_SPACES: SampleSpace[] = [
 ];
 
 const DEFAULT_SPACE = { ...SAMPLE_SPACES[0], name: "Simon's Street (sample)" };
+
+/**
+ * Where the built-in worlds live publicly. Shown in the New-world picker so people
+ * can see the starter worlds are ordinary files at ordinary URLs — and reuse them.
+ */
+const PUBLISHED_BASE = 'https://memory-palaces.github.io/simon-says/';
 
 /** Duration of the bird's-eye zoom out / back (ms). */
 const OVERVIEW_MS = 650;
@@ -240,6 +247,8 @@ class App {
       setCaptions: (on) => this.setCaptions(on),
       setCueLabels: (on) => this.setCueLabels(on),
       cycleLabels: () => this.cycleWorldText(),
+      setWorldUrl: (url) => void this.setWorldUrl(url),
+      setEmbedAssets: (on) => this.setEmbedAssets(on),
       toggleHelp: () => this.helpOverlay.toggle(),
       toggleScaleFigure: () => this.toggleScaleFigure(),
       setBackendId: (id) => this.setBackendId(id),
@@ -451,7 +460,7 @@ class App {
   private async saveToServer(): Promise<void> {
     const name = this.serverName ?? sanitizeName(this.root.name);
     try {
-      await saveServerPalace(name, this.root);
+      await saveServerPalace(name, await palaceForExport(this.root));
       this.serverName = name;
       this.savedClean = true;
       const where = this.serverDir ? `${this.serverDir}/${name}.json` : `${name}.json`;
@@ -500,7 +509,7 @@ class App {
 
   /** Explicit file export (Save As / download), independent of the server. */
   private async save(forceNew = false): Promise<void> {
-    const outcome = await savePalace(this.root, forceNew ? null : this.fileHandle);
+    const outcome = await savePalace(await palaceForExport(this.root), forceNew ? null : this.fileHandle);
     if (outcome.status === 'cancelled') return;
     if (outcome.status === 'handle') this.fileHandle = outcome.handle;
     this.savedClean = true;
@@ -1986,19 +1995,24 @@ class App {
 
   private async newPalace(): Promise<void> {
     if (!(await this.confirmDiscard('Start a new world?'))) return;
-    // Which space should the fresh world use? Keeping the current model lets you
-    // restart your loci in the same place; the samples give you a clean start.
-    const choice = await chooseAction(this.mount, {
-      title: 'New world',
-      message: 'Which space do you want to start in?',
-      choices: [
-        { id: 'keep', label: 'Keep this space', sublabel: 'Same model, fresh empty route', variant: 'primary' },
-        ...SAMPLE_SPACES.map((s) => ({ id: s.id, label: s.label, sublabel: s.sublabel })),
-        { id: 'cancel', label: 'Cancel' },
-      ],
+    const choice = await chooseNewWorld(this.mount, {
+      samples: SAMPLE_SPACES.map((s) => ({
+        id: s.id,
+        label: s.label,
+        sublabel: s.sublabel,
+        url: s.url,
+        publicUrl: new URL(s.url, PUBLISHED_BASE).toString(),
+      })),
+      canKeep: this.viewer.hasModel,
     });
-    if (choice === null || choice === 'cancel') return;
-    const sample = SAMPLE_SPACES.find((s) => s.id === choice);
+    if (!choice) return;
+    if (choice.kind === 'file') {
+      await this.newPalaceWithGeometry(choice.file);
+      return;
+    }
+
+    const sample = choice.kind === 'sample' ? SAMPLE_SPACES.find((s) => s.id === choice.id) : undefined;
+    const url = choice.kind === 'url' ? choice.url : sample?.url;
 
     // A fresh palace gets a fresh name (not the previous one's).
     this.palace = createEmptyPalace();
@@ -2008,16 +2022,27 @@ class App {
     this.serverName = null; // a fresh world isn't bound to a saved file yet
     this.selectedId = null;
     this.editor.setNotice(null); // clear any stale "drag the geometry" message
-    if (sample) {
-      this.overlay.showLoading(sample.label);
+    if (url) {
+      this.overlay.showLoading(sample?.label ?? url);
       try {
-        await this.viewer.loadUrl(sample.url);
+        await this.viewer.loadUrl(url);
+        setAsset(this.palace, url);
       } catch (err) {
         console.error(err);
-        this.toasts.error(`Couldn't load ${sample.label}.`);
+        this.overlay.hide();
+        // Don't leave the previous world on screen while the palace claims a
+        // different URL — that reads as "it worked". Clear the geometry, keep the
+        // reference so a typo can be fixed in World settings, and say what's wrong.
+        this.viewer.clearModel();
+        setAsset(this.palace, url);
+        this.toasts.error(
+          sample
+            ? `Couldn't load ${sample.label}.`
+            : `Couldn't load that .glb — check the link opens in a browser tab, and that the host allows cross-origin requests.`,
+        );
+        this.editor.setNotice(`No geometry loaded from "${url}". Fix the URL under World settings, or drag a .glb onto the window.`);
       }
-      setAsset(this.palace, sample.url);
-      this.palace.environment = { ...this.palace.environment, ...sample.environment };
+      if (sample) this.palace.environment = { ...this.palace.environment, ...sample.environment };
       this.overlay.hide();
     } else {
       setAsset(this.palace, this.viewer.assetFile);
@@ -2026,8 +2051,42 @@ class App {
     this.loci.sync(this.palace);
     this.history.reset(this.root);
     if (sample && this.viewer.hasModel) this.spawnInSample(sample);
+    else if (url && this.viewer.hasModel) this.viewer.frameModel(); // unknown world: view it from outside
     this.markDirty();
     this.savedClean = true; // a fresh, empty palace has nothing unsaved to lose
+    this.renderEditor();
+  }
+
+  /** Point the CURRENT world at a different GLB URL, keeping the loci in place. */
+  private async setWorldUrl(url: string): Promise<void> {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    this.overlay.showLoading(trimmed);
+    try {
+      await this.viewer.loadUrl(trimmed);
+      setAsset(this.palace, trimmed);
+      if (this.palace.loci.length === 0) this.viewer.frameModel();
+      this.viewer.applyEnvironment(this.palace.environment);
+      this.loci.sync(this.palace);
+      this.markDirty();
+      this.checkpoint();
+      this.toasts.success('World geometry swapped — your loci kept their coordinates.');
+    } catch (err) {
+      console.error(err);
+      this.toasts.error(
+        "Couldn't load that .glb — check the link opens in a browser tab, and that the host allows cross-origin requests.",
+      );
+      // Leave the world that IS loaded in place; the palace keeps pointing at it.
+    }
+    this.overlay.hide();
+    this.renderEditor();
+  }
+
+  /** Toggle "embed the GLB in exports" for this world. */
+  private setEmbedAssets(on: boolean): void {
+    this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), embedAssets: on };
+    this.markDirty();
+    this.checkpointSoon();
     this.renderEditor();
   }
 
