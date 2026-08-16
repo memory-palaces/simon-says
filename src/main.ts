@@ -257,6 +257,7 @@ class App {
       setObjectScale: (id, v) => this.setObjectScale(id, v),
       setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
       setObjectOffset: (id, axis, v) => this.setObjectOffset(id, axis, v),
+      aimAtMe: (id) => this.aimLocusAtCamera(id),
       setStyle: (id) => this.setStyle(id),
       setProviderModel: (id, model) => this.setProviderModel(id, model),
       enterPortal: (id) => void this.enterPortal(id),
@@ -878,6 +879,17 @@ class App {
       return;
     }
 
+    // 'L' cycles the in-world Labels: cue + mnemonic -> cue only -> none -> back.
+    // Quizzing yourself means hiding the answer, and reaching for a checkbox mid-walk
+    // breaks the spell. (Not 'C' — that's fly-down.)
+    const ct = e.target as HTMLElement | null;
+    const cTyping = !!ct && (ct.tagName === 'INPUT' || ct.tagName === 'TEXTAREA');
+    if (!cTyping && (e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      this.cycleWorldText();
+      return;
+    }
+
     // 'V' toggles the bird's-eye view of the whole world.
     const vt = e.target as HTMLElement | null;
     const vTyping = !!vt && (vt.tagName === 'INPUT' || vt.tagName === 'TEXTAREA');
@@ -1089,6 +1101,22 @@ class App {
     this.viewer.setScaleFigureScale(value);
     this.markDirty();
     this.checkpointSoon();
+  }
+
+  /** L: cue + mnemonic -> cue only -> nothing -> cue + mnemonic. */
+  private cycleWorldText(): void {
+    const env = this.palace.environment ?? { background: DEFAULT_BACKGROUND };
+    const cue = env.cueLabels !== false;
+    const mnemonic = env.captions !== false;
+    const next = cue && mnemonic ? { cueLabels: true, captions: false } : cue ? { cueLabels: false, captions: false } : { cueLabels: true, captions: true };
+    this.palace.environment = { ...env, ...next };
+    this.loci.sync(this.palace);
+    this.toasts.info(
+      next.captions ? 'Showing cue + mnemonic' : next.cueLabels ? 'Showing the location cue only — mnemonic hidden' : 'In-world text hidden',
+    );
+    this.markDirty();
+    this.checkpointSoon();
+    if (this.mode === 'edit') this.renderEditor();
   }
 
   /** Toggle the location-cue heading on the in-world plaques. */
@@ -1898,6 +1926,31 @@ class App {
     this.mutateLocus(id, (l) => (l.object_scale = value), false);
     this.loci.sync(this.palace);
     this.checkpointSoon();
+  }
+
+  /**
+   * Re-aim a locus at wherever you're standing. A locus stores the surface normal it
+   * was dropped on, and everything attached — image, caption, mesh — hangs off that
+   * direction. Aim at a doorframe's edge or a slanted face and the whole tableau
+   * sits skewed. This points the anchor at the camera instead, so the attached
+   * things face you and stand off the surface in the direction you're looking from.
+   */
+  private aimLocusAtCamera(id: string): void {
+    const locus = this.palace.loci.find((l) => l.id === id);
+    if (!locus) return;
+    const pos = this.loci.worldPosition(locus, this.scratchA);
+    const dir = this.scratchB.copy(this.viewer.camera.position).sub(pos);
+    if (dir.lengthSq() < 1e-6) {
+      this.toasts.info('Move back a little first, then aim.');
+      return;
+    }
+    dir.normalize();
+    const local = this.loci.worldToLocal(locus.asset_id, pos, dir);
+    this.mutateLocus(id, (l) => (l.local_normal = local.normal), false);
+    this.loci.sync(this.palace);
+    this.checkpoint();
+    this.renderEditor();
+    this.toasts.success('Anchor now faces you — attached image/model follow it.');
   }
 
   /** Nudge a locus's attached image/mesh: 0 = right, 1 = up, 2 = out along the normal. */

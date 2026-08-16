@@ -22,6 +22,7 @@ export class HelpOverlay {
         <span>Zoom (dolly)</span><span>mouse wheel or { / }</span>
         <span>Recenter on #1</span><span>R</span>
         <span>X-ray all pins</span><span>X</span>
+        <span>Cycle in-world text</span><span>L <em>(cue + mnemonic → cue → none)</em></span>
         <span>Drop a locus</span><span>T</span>
         <span>Move a locus</span><span>G <em>(aim at a marker)</em></span>
         <span>Delete a locus</span><span>B <em>(aim at a marker)</em></span>

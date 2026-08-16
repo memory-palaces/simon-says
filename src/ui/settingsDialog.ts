@@ -206,6 +206,7 @@ export class SettingsDialog {
       <span>Delete / move locus</span><span>B / G <em>(aim at a marker)</em></span>
       <span>Recenter on floor</span><span>R</span>
       <span>X-ray (all pins through walls)</span><span>X</span>
+      <span>Cycle in-world text</span><span>L <em>(cue + mnemonic → cue → none)</em></span>
       <span>Show controls help</span><span>?</span>
       <span>Bird’s-eye view</span><span>V <em>(click a spot to go there)</em></span>
       <span>Drop a portal</span><span>P</span>

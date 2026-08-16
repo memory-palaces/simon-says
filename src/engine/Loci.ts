@@ -318,10 +318,16 @@ export class LociLayer {
       .addScaledVector(up, marker.objectOffset.y)
       .addScaledVector(marker.normal, marker.objectOffset.z);
 
+    // Scale must GROW the thing, not fly it away from its pin. Standoff from the
+    // surface is constant; the sprite is anchored by its BOTTOM edge just above the
+    // orb, so turning scale up makes it taller in place instead of drifting up and
+    // outward along the normal (which read as "diagonal drift" when scaling).
+    const IMG_BASE = 0.55; // height of the sprite's bottom edge above the marker
+    const imgH = 0.9 * os;
     if (marker.image) {
-      marker.image.scale.setScalar(0.9 * os);
-      marker.image.position.copy(marker.normal).multiplyScalar(0.5 * os);
-      marker.image.position.y += 0.8 * os;
+      marker.image.scale.setScalar(imgH);
+      marker.image.position.copy(marker.normal).multiplyScalar(0.5);
+      marker.image.position.y += IMG_BASE + imgH / 2;
       marker.image.position.add(nudge);
     }
     if (marker.caption) {
@@ -329,9 +335,10 @@ export class LociLayer {
       const a = marker.captionAspect ?? 3;
       const h = 0.34;
       marker.caption.scale.set(h * a, h, 1);
-      marker.caption.position.copy(marker.normal).multiplyScalar(0.5 * os);
+      marker.caption.position.copy(marker.normal).multiplyScalar(0.5);
       const imageShown = !!marker.image && marker.image.visible;
-      marker.caption.position.y += imageShown ? 0.8 * os + 0.45 * os + h * 0.5 + 0.05 : 0.75;
+      // Sit just above the image (whatever its scale), or where the image would be.
+      marker.caption.position.y += imageShown ? IMG_BASE + imgH + h * 0.5 + 0.05 : 0.75;
       if (imageShown) marker.caption.position.add(nudge); // follow the image it labels
     }
     if (marker.mesh3d && marker.meshRawCenter && marker.meshMaxDim) {
@@ -340,9 +347,11 @@ export class LociLayer {
       marker.mesh3d.scale.setScalar(scale);
       marker.mesh3d.rotation.set(deg2rad(marker.objectRot.x), deg2rad(marker.objectRot.y), deg2rad(marker.objectRot.z));
       const half = (marker.meshMaxDim * scale) / 2;
-      // recentre, then push out past the wall by its half-size and lift slightly.
+      // Recentre, then push out past the wall by its half-size (so a bigger mesh
+      // still clears the surface) and lift by a CONSTANT amount — scaling should
+      // not also translate it up and away.
       marker.mesh3d.position.copy(marker.meshRawCenter).multiplyScalar(-scale).addScaledVector(marker.normal, half + 0.15);
-      marker.mesh3d.position.y += 0.3 * os;
+      marker.mesh3d.position.y += 0.3;
       marker.mesh3d.position.add(nudge);
     }
   }

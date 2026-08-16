@@ -56,6 +56,8 @@ export interface EditorHandlers {
   setObjectRotation(id: string, axis: number, value: number): void;
   /** Nudge the attached image/mesh: axis 0 = right, 1 = up, 2 = out along the normal. */
   setObjectOffset(id: string, axis: number, value: number): void;
+  /** Point this locus's anchor at the camera (image/mesh hang off that direction). */
+  aimAtMe(id: string): void;
   selectAttachment(id: string, index: number): void;
   removeAttachment(id: string, index: number): void;
   setStyle(id: string): void;
@@ -654,6 +656,15 @@ export class EditorPanel {
           onChange: (v) => this.handlers.setObjectOffset(locus.id, 2, v),
         }),
       );
+      // The anchor's direction decides where everything attached sits. When a locus
+      // lands on a doorframe edge or an angled face, the tableau hangs off sideways
+      // — one click re-aims it at wherever you're standing.
+      const aimRow = div('locus-gen-row');
+      const aim = button('🎯 Aim at me', '', () => this.handlers.aimAtMe(locus.id));
+      aim.title = 'Point this locus at the camera, so its image/model face you and stand off the surface toward you';
+      aimRow.appendChild(aim);
+      wrap.appendChild(aimRow);
+
       const more = div('nudge-more');
       const toggle = button('⇔ ⇕ nudge sideways / up', 'link', () => {
         more.classList.toggle('open');
