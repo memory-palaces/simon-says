@@ -103,6 +103,7 @@ export class LociLayer {
   sync(palace: Palace): void {
     const live = new Set<string>();
     const captions = palace.environment?.captions !== false; // default on
+    const cues = palace.environment?.cueLabels !== false; // default on
     for (const locus of palace.loci) {
       live.add(locus.id);
       const root = this.resolve(locus.asset_id);
@@ -127,7 +128,7 @@ export class LociLayer {
       marker.objectRot.set(r[0], r[1], r[2]);
       this.updatePortal(marker);
       this.updateImage(marker, locus.image_2d);
-      this.updateCaption(marker, captions ? locus.image_prompt : '');
+      this.updateCaption(marker, captions ? locus.image_prompt : '', cues ? locus.label : '');
       void this.updateMesh3d(marker, locus.mesh_3d);
       this.positionChildren(marker);
       this.syncProps(marker, locus);
@@ -506,9 +507,10 @@ export class LociLayer {
   }
 
   /** Show (or hide) the mnemonic text as a plaque above the marker. */
-  private updateCaption(marker: Marker, text: string): void {
+  private updateCaption(marker: Marker, text: string, title = ''): void {
     const t = text.trim();
-    if (!t) {
+    const heading = title.trim();
+    if (!t && !heading) {
       if (marker.caption) marker.caption.visible = false;
       return;
     }
@@ -517,11 +519,12 @@ export class LociLayer {
       marker.caption.renderOrder = 10; // readable over nearby walls, like the image
       marker.group.add(marker.caption);
     }
-    if (marker.captionText !== t) {
-      marker.captionText = t;
+    const key = `${heading}\u0000${t}`;
+    if (marker.captionText !== key) {
+      marker.captionText = key;
       const mat = marker.caption.material as THREE.SpriteMaterial;
       mat.map?.dispose();
-      const { tex, aspect } = textTexture(t);
+      const { tex, aspect } = textTexture(t, heading);
       mat.map = tex;
       mat.needsUpdate = true;
       marker.captionAspect = aspect;
@@ -832,7 +835,7 @@ function buildProp(kind: SceneProp['kind']): PropObj {
  * is capped at MAX_LINES (ellipsis) so a paragraph-length mnemonic stays legible
  * in the world instead of becoming a 20-metre-wide strip.
  */
-function textTexture(text: string): { tex: THREE.Texture; aspect: number } {
+function textTexture(text: string, title = ''): { tex: THREE.Texture; aspect: number } {
   const fontSize = 64;
   const pad = 26;
   const lineH = Math.round(fontSize * 1.18);
@@ -869,9 +872,26 @@ function textTexture(text: string): { tex: THREE.Texture; aspect: number } {
     lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1].replace(/\s*\S*$/, '')}…`;
   }
 
-  const textW = Math.max(...lines.map((l) => meas.measureText(l).width));
+  // The location cue rides above the mnemonic as a smaller, dimmer heading.
+  const titleSize = Math.round(fontSize * 0.62);
+  const titleFont = `600 ${titleSize}px ui-sans-serif, system-ui, sans-serif`;
+  const titleH = title ? Math.round(titleSize * 1.5) : 0;
+  let titleText = title;
+  if (title) {
+    meas.font = titleFont;
+    while (titleText.length > 4 && meas.measureText(titleText).width > MAX_LINE) {
+      titleText = `${titleText.slice(0, -2)}…`;
+    }
+    meas.font = font;
+  }
+
+  const bodyW = lines.length ? Math.max(...lines.map((l) => meas.measureText(l).width)) : 0;
+  meas.font = titleFont;
+  const titleW = titleText ? meas.measureText(titleText).width : 0;
+  meas.font = font;
+  const textW = Math.max(bodyW, titleW);
   const w = Math.min(MAX_LINE + pad * 2, Math.max(80, Math.ceil(textW) + pad * 2));
-  const h = lineH * lines.length + pad * 2;
+  const h = lineH * lines.length + titleH + pad * 2;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -884,11 +904,16 @@ function textTexture(text: string): { tex: THREE.Texture; aspect: number } {
   } else {
     ctx.fillRect(0, 0, w, h);
   }
-  ctx.fillStyle = '#ffffff';
-  ctx.font = font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  lines.forEach((l, i) => ctx.fillText(l, w / 2, pad + lineH * (i + 0.5) + 2));
+  if (titleText) {
+    ctx.fillStyle = '#ffcf5c'; // the same warm gold as the markers
+    ctx.font = titleFont;
+    ctx.fillText(titleText, w / 2, pad + titleH / 2);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.font = font;
+  lines.forEach((l, i) => ctx.fillText(l, w / 2, pad + titleH + lineH * (i + 0.5) + 2));
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return { tex, aspect: w / h };

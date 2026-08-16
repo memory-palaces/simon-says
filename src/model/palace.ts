@@ -249,6 +249,12 @@ export interface Environment {
    * image generation, so the words themselves are what they see in the palace.
    */
   captions?: boolean;
+  /**
+   * Float each locus's LOCATION CUE above its marker too (a small heading over the
+   * mnemonic). Undefined = on: the cue is what you actually navigate by, and it's
+   * the only text a palace has before anyone sets up image generation.
+   */
+  cueLabels?: boolean;
 }
 
 /** Cheerful vertical-gradient sky presets (top -> horizon). */

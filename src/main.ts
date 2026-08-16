@@ -126,6 +126,12 @@ class App {
   private readonly welcome = new WelcomeDialog(this.mount);
   private readonly generateDialog = new GenerateDialog(this.mount);
   private readonly meshPreview = new MeshPreview();
+  /**
+   * Image→3D jobs currently running, keyed by what they'll be applied to. The
+   * button for a running job renders disabled: 3D is the slow, expensive stage, and
+   * a stray second click used to quietly queue a whole second render.
+   */
+  private readonly pending3d = new Set<string>();
   private readonly helpOverlay = new HelpOverlay(this.mount);
   private readonly mapOverlay = new MapOverlay(this.mount, (path) => void this.jumpToWorld(path));
   private readonly settingsDialog = new SettingsDialog(this.mount, {
@@ -214,6 +220,7 @@ class App {
       // checkpointed on a debounce so one Ctrl+Z doesn't rewind character-by-character.
       updateLabel: (id, text) => {
         this.mutateLocus(id, (l) => (l.label = text), false);
+        this.loci.sync(this.palace); // the in-world cue mirrors the field live
         this.checkpointSoon();
       },
       updatePrompt: (id, text) => {
@@ -231,6 +238,7 @@ class App {
       setBrightness: (v) => this.setBrightness(v),
       setPlayerScale: (v) => this.setPlayerScale(v),
       setCaptions: (on) => this.setCaptions(on),
+      setCueLabels: (on) => this.setCueLabels(on),
       toggleScaleFigure: () => this.toggleScaleFigure(),
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
@@ -313,6 +321,10 @@ class App {
     this.viewer.start();
     this.viewer.onFrame(() => this.onFrame());
     this.wireEvents();
+    // Dev-only handle for poking at the app from the console (and for automated
+    // checks). Vite strips this from production builds — `import.meta.env.DEV` is
+    // statically false there, so the whole line is dead-code eliminated.
+    if (import.meta.env.DEV) (window as unknown as { __simon?: App }).__simon = this;
     void this.boot().finally(() => {
       if (WelcomeDialog.wantedOnStartup()) this.welcome.open();
     });
@@ -996,6 +1008,7 @@ class App {
       // Resolved per provider (not the raw map) so the dropdown shows exactly what
       // the backend will send — including fal.ai's pre-existing legacy model slot.
       providerModels: Object.fromEntries(KEY_PROVIDERS.map((p) => [p.id, providerModel(p.id, p.defaultModel)])),
+      pending3d: this.pending3d,
     });
   }
 
@@ -1074,6 +1087,14 @@ class App {
     this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), playerScale: value };
     this.viewer.fp.setScale(value);
     this.viewer.setScaleFigureScale(value);
+    this.markDirty();
+    this.checkpointSoon();
+  }
+
+  /** Toggle the location-cue heading on the in-world plaques. */
+  private setCueLabels(on: boolean): void {
+    this.palace.environment = { ...(this.palace.environment ?? { background: DEFAULT_BACKGROUND }), cueLabels: on };
+    this.loci.sync(this.palace);
     this.markDirty();
     this.checkpointSoon();
   }
@@ -1419,7 +1440,7 @@ class App {
       found.prop.src = glb;
       found.prop.rotation = found.prop.rotation ?? [0, 0, 0];
       addPropAttachment(found.prop, { type: 'mesh', src: glb });
-    });
+    }, `prop:${locusId}:${propId}`);
   }
 
   // --- Free-standing decor ---------------------------------------------------
@@ -1565,7 +1586,7 @@ class App {
       d.src = glb;
       d.rotation = d.rotation ?? [0, 0, 0];
       addPropAttachment(d, { type: 'mesh', src: glb });
-    });
+    }, `decor:${id}`);
   }
 
   // --- Portal visuals --------------------------------------------------------
@@ -1665,7 +1686,7 @@ class App {
       p.src = glb;
       p.rotation = p.rotation ?? [0, 0, 0];
       addPropAttachment(p, { type: 'mesh', src: glb });
-    });
+    }, `portal:${id}`);
   }
 
   // --- Assets library --------------------------------------------------------
@@ -1776,7 +1797,7 @@ class App {
     await this.imageTo3d(locus.image_2d, label, (glb) => {
       locus.mesh_3d = glb;
       addAttachment(locus, { type: 'mesh', src: glb });
-    });
+    }, `locus:${id}`);
   }
 
   /**
@@ -1784,20 +1805,25 @@ class App {
    * that resolves in place (multiple jobs can run at once). No-ops if the pipeline
    * can't do 3D. `onGlb` applies the result to whatever holds it (locus or prop).
    */
-  private async imageTo3d(image: string, label: string, onGlb: (glb: string) => void): Promise<void> {
+  private async imageTo3d(image: string, label: string, onGlb: (glb: string) => void, key: string): Promise<void> {
     const backend = getBackend(this.activeBackendId());
     if (!backend?.imageTo3d) return;
+    if (this.pending3d.has(key)) return; // already running for this target
+    this.pending3d.add(key);
+    this.renderEditor(); // the button redraws as "Making 3D…" and stops accepting clicks
     const toast = this.toasts.show(`Rendering 3D — ${label}…`, 'info', { sticky: true });
     try {
       const glb = await backend.imageTo3d(image);
       onGlb(glb);
       this.loci.sync(this.palace);
       this.checkpoint();
-      this.renderEditor();
       toast.update(`3D ready — ${label}`, 'success');
     } catch (err) {
       console.error(err);
       toast.update(`3D failed — ${label}: ${err instanceof Error ? err.message : 'error'}`, 'error');
+    } finally {
+      this.pending3d.delete(key);
+      this.renderEditor();
     }
   }
 

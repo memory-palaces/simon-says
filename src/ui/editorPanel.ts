@@ -9,6 +9,8 @@ interface GenState {
   styleId: string;
   /** Chosen model per key-only provider id (falls back to that provider's default). */
   providerModels: Record<string, string>;
+  /** Keys of image→3D jobs in flight, so their buttons render busy and inert. */
+  pending3d: Set<string>;
 }
 
 /** Everything the panel needs to call back into the app. */
@@ -39,6 +41,7 @@ export interface EditorHandlers {
   setBrightness(value: number): void;
   setPlayerScale(value: number): void;
   setCaptions(on: boolean): void;
+  setCueLabels(on: boolean): void;
   toggleScaleFigure(): void;
   setBackendId(id: string): void;
   generate(id: string): void;
@@ -137,6 +140,7 @@ export class EditorPanel {
     can3d: false,
     styleId: 'none',
     providerModels: {},
+    pending3d: new Set<string>(),
   };
 
   constructor(mount: HTMLElement, handlers: EditorHandlers) {
@@ -409,7 +413,10 @@ export class EditorPanel {
         thumb.src = d.src;
         card.appendChild(thumb);
         const row2 = div('locus-gen-row');
-        if (this.gen.can3d) row2.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeDecor3d(d.id)));
+        if (this.gen.can3d)
+          row2.appendChild(
+            make3dButton(this.gen.pending3d, `decor:${d.id}`, false, () => this.handlers.makeDecor3d(d.id)),
+          );
         row2.appendChild(iconButton('⬇', 'download image', () => downloadAsset(d.src!, `decor-${d.id}`)));
         card.appendChild(row2);
       } else if (d.kind === 'mesh' && d.src) {
@@ -516,17 +523,22 @@ export class EditorPanel {
 
     // Mnemonic text in the world — on by default: without image generation set up,
     // the words are the whole point of visiting a locus.
-    const cap = document.createElement('label');
-    cap.className = 'check-row';
-    const capBox = document.createElement('input');
-    capBox.type = 'checkbox';
-    capBox.checked = palace.environment?.captions !== false;
-    capBox.onchange = () => this.handlers.setCaptions(capBox.checked);
-    const capText = document.createElement('span');
-    capText.textContent = 'Show mnemonic text in the world';
-    cap.title = 'Float each locus’s mnemonic as a plaque above its marker (above the image, if it has one)';
-    cap.append(capBox, capText);
-    wrap.appendChild(cap);
+    wrap.appendChild(
+      checkRow(
+        'Show location cue in the world',
+        'Float each locus’s location cue above its marker — the heading you navigate by',
+        palace.environment?.cueLabels !== false,
+        (on) => this.handlers.setCueLabels(on),
+      ),
+    );
+    wrap.appendChild(
+      checkRow(
+        'Show mnemonic text in the world',
+        'Float each locus’s mnemonic as a plaque above its marker (above the image, if it has one)',
+        palace.environment?.captions !== false,
+        (on) => this.handlers.setCaptions(on),
+      ),
+    );
 
     // Player scale — be tiny (space feels huge) or a giant. The 🚶 button drops a
     // person-sized reference so you can eyeball the scale.
@@ -757,7 +769,12 @@ export class EditorPanel {
         card.appendChild(thumb);
         const row2 = div('locus-gen-row');
         // Upgrade the billboard to a real 3D object (gated on 2D + a can-3D pipeline).
-        if (this.gen.can3d) row2.appendChild(button('⬗ Make 3D', '', () => this.handlers.makeProp3d(locus.id, prop.id)));
+        if (this.gen.can3d)
+          row2.appendChild(
+            make3dButton(this.gen.pending3d, `prop:${locus.id}:${prop.id}`, false, () =>
+              this.handlers.makeProp3d(locus.id, prop.id),
+            ),
+          );
         row2.appendChild(iconButton('⬇', 'download image', () => downloadAsset(prop.src!, `prop-${prop.id}`)));
         card.appendChild(row2);
       } else if (prop.kind === 'mesh' && prop.src) {
@@ -844,7 +861,7 @@ export class EditorPanel {
     if (locus.image_2d && this.gen.can3d) {
       const row = div('locus-gen-row');
       row.appendChild(
-        button(locus.mesh_3d ? '↻ Remake 3D' : '⬗ Make 3D', '', () => this.handlers.generate3d(locus.id)),
+        make3dButton(this.gen.pending3d, `locus:${locus.id}`, !!locus.mesh_3d, () => this.handlers.generate3d(locus.id)),
       );
       if (locus.mesh_3d) {
         const tag = div('locus-gen-hint');
@@ -988,7 +1005,10 @@ export class EditorPanel {
       thumb.src = portal.src;
       card.appendChild(thumb);
       const row2 = div('locus-gen-row');
-      if (this.gen.can3d) row2.appendChild(button('⬗ Make 3D', '', () => this.handlers.makePortal3d(portal.id)));
+      if (this.gen.can3d)
+        row2.appendChild(
+          make3dButton(this.gen.pending3d, `portal:${portal.id}`, false, () => this.handlers.makePortal3d(portal.id)),
+        );
       row2.appendChild(iconButton('⬇', 'download image', () => downloadAsset(portal.src!, `portal-${portal.id}`)));
       card.appendChild(row2);
     } else if (portal.kind === 'mesh' && portal.src) {
@@ -1189,6 +1209,34 @@ function labeledSelect(
   lab.appendChild(select);
   el.appendChild(lab);
   return el;
+}
+
+/**
+ * The image→3D button. 3D is the slow, costly stage, so while a job for this exact
+ * target is running the button says so and refuses further clicks — one stray
+ * double-click used to pay for two renders.
+ */
+function make3dButton(pending: Set<string>, key: string, hasMesh: boolean, onClick: () => void): HTMLButtonElement {
+  const busy = pending.has(key);
+  const b = button(busy ? '⏳ Making 3D…' : hasMesh ? '↻ Remake 3D' : '⬗ Make 3D', '', onClick);
+  b.disabled = busy;
+  if (busy) b.title = 'Already rendering this one — watch the toast in the corner.';
+  return b;
+}
+
+/** A labelled checkbox row (used by the world-settings toggles). */
+function checkRow(label: string, title: string, checked: boolean, onChange: (on: boolean) => void): HTMLElement {
+  const row = document.createElement('label');
+  row.className = 'check-row';
+  row.title = title;
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = checked;
+  box.onchange = () => onChange(box.checked);
+  const text = document.createElement('span');
+  text.textContent = label;
+  row.append(box, text);
+  return row;
 }
 
 function button(text: string, variant: string, onClick: () => void): HTMLButtonElement {
