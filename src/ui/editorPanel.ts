@@ -42,6 +42,10 @@ export interface EditorHandlers {
   setPlayerScale(value: number): void;
   setCaptions(on: boolean): void;
   setCueLabels(on: boolean): void;
+  /** Cycle the in-world text: cue + mnemonic → cue only → none (same as L). */
+  cycleLabels(): void;
+  /** Show / hide the controls cheat-sheet (same as ?). */
+  toggleHelp(): void;
   toggleScaleFigure(): void;
   setBackendId(id: string): void;
   generate(id: string): void;
@@ -213,8 +217,15 @@ export class EditorPanel {
     name.oninput = () => this.handlers.renamePalace(name.value);
     header.appendChild(name);
 
+    // Grouped into rows that mean something, instead of one long wrap: file
+    // actions, then world actions, then the small utilities. Each row is its own
+    // flex line, so undo/redo can't get orphaned onto the next line by itself.
     const actions = div('editor-actions');
-    actions.appendChild(button('▶ Enter', 'primary', () => this.handlers.enterWalk()));
+    const rowFile = div('action-row');
+    const rowWorld = div('action-row');
+    const rowUtil = div('action-row');
+
+    // --- File: keeping and fetching worlds -------------------------------------
     if (this.serverOnline) {
       // Two systems: Save/Open keep worlds on THIS computer; Import/Export use files.
       const save = button('Save', '', () => this.handlers.save());
@@ -225,46 +236,68 @@ export class EditorPanel {
       imp.title = 'Load a .json world file — e.g. one you downloaded earlier';
       const exp = button('Export', '', () => this.handlers.exportFile());
       exp.title = 'Download this world as a .json file (to share or back up)';
-      actions.append(save, open, sep(), imp, exp);
+      // New sits with Save/Open (both are "which world am I in"); the file-transfer
+      // pair goes after the separator, so a wrap breaks between the two ideas.
+      rowFile.append(save, open, button('New', '', () => this.handlers.newPalace()), sep(), imp, exp);
     } else {
       const save = button('Save', '', () => this.handlers.save());
       save.title = 'Download this world as a .json file';
       const open = button('Open', '', () => this.handlers.load());
       open.title = 'Open a .json world file';
-      actions.append(save, open);
+      rowFile.append(save, open, button('New', '', () => this.handlers.newPalace()));
     }
-    actions.appendChild(button('New', '', () => this.handlers.newPalace()));
+    const newBtn = rowFile.querySelector<HTMLButtonElement>('button:last-of-type');
+    if (newBtn?.textContent === 'New') newBtn.title = 'Start a fresh world — keep this space or pick another';
+
+    // --- World: things you do to THIS palace ------------------------------------
     const review = button('Review ▸', '', () => this.handlers.startReview());
+    review.title = palace.loci.length === 0 ? 'Add a locus first' : 'Walk the route and quiz yourself';
     review.disabled = palace.loci.length === 0;
-    actions.appendChild(review);
+    rowWorld.appendChild(review);
 
     const assets = button('🗂 Assets', '', () => this.handlers.openAssets());
     assets.title = 'See and reuse every image / 3D model in this world';
-    actions.appendChild(assets);
+    rowWorld.appendChild(assets);
+
+    const labels = button('🏷 Labels', '', () => this.handlers.cycleLabels());
+    labels.title = 'Show / hide the in-world text: cue + mnemonic → cue only → none (L)';
+    rowWorld.appendChild(labels);
 
     const recenter = button('⌖ Recenter', '', () => this.handlers.recenter());
     recenter.title = 'Drop back onto the floor (R)';
-    actions.appendChild(recenter);
+    rowWorld.appendChild(recenter);
 
+    // --- Utilities: undo/redo together, then help and settings -------------------
     this.undoBtn = button('↶', '', () => this.handlers.undo());
     this.undoBtn.title = 'Undo (Ctrl/Cmd+Z)';
     this.undoBtn.disabled = !canUndo;
     this.redoBtn = button('↷', '', () => this.handlers.redo());
     this.redoBtn.title = 'Redo (Ctrl/Cmd+Shift+Z)';
     this.redoBtn.disabled = !canRedo;
-    actions.append(this.undoBtn, this.redoBtn);
+    rowUtil.append(this.undoBtn, this.redoBtn, sep());
 
-    const gear = button('⚙', '', () => this.handlers.openSettings());
-    gear.title = 'Settings (keys, controls)';
-    actions.appendChild(gear);
+    const help = button('❓ On-screen help (?)', '', () => this.handlers.toggleHelp());
+    help.title = 'Show / hide the controls cheat-sheet (?)';
+    rowUtil.appendChild(help);
 
     const guide = button('📖 Guide', '', () => this.handlers.openGuide());
     guide.title = 'How to use Simon Says — the quick-start guide';
-    actions.appendChild(guide);
+    rowUtil.appendChild(guide);
+
+    const gear = button('⚙', '', () => this.handlers.openSettings());
+    gear.title = 'Settings — API keys, rendering preamble, controls';
+    rowUtil.appendChild(gear);
 
     const log = button('>_', '', () => this.handlers.openLog());
     log.title = 'Activity log / console';
-    actions.appendChild(log);
+    rowUtil.appendChild(log);
+
+    actions.append(rowFile, rowWorld, rowUtil);
+
+    // The one button you press most, given its own line and full width.
+    const enter = button('▶ Enter world', 'primary enter-world', () => this.handlers.enterWalk());
+    enter.title = 'Walk this world in first person (Esc comes back here)';
+    actions.appendChild(enter);
 
     header.appendChild(actions);
     this.root.appendChild(header);
@@ -337,6 +370,9 @@ export class EditorPanel {
       }
     }
     this.root.appendChild(list);
+
+    // --- Show / hide the floating text (right under the route it applies to) ----
+    this.root.appendChild(this.textSection(palace));
 
     // --- Portals to other worlds -----------------------------------------------
     this.root.appendChild(this.portalsSection(palace));
@@ -461,6 +497,38 @@ export class EditorPanel {
     return card;
   }
 
+  /**
+   * Show / hide the floating text. Its own section, above the fold: plenty of
+   * people work purely from the imagery and want the words gone so they can guess,
+   * and hunting for a checkbox under the colour swatches is no way to find that.
+   */
+  private textSection(palace: Palace): HTMLElement {
+    const wrap = div('editor-world');
+    const title = div('ctrl-title');
+    title.textContent = 'Text in the world';
+    wrap.appendChild(title);
+    wrap.appendChild(
+      checkRow(
+        'Show location cue',
+        'Float each locus’s location cue above its marker — the heading you navigate by',
+        palace.environment?.cueLabels !== false,
+        (on) => this.handlers.setCueLabels(on),
+      ),
+    );
+    wrap.appendChild(
+      checkRow(
+        'Show mnemonic text',
+        'Float each locus’s mnemonic as a plaque above its marker (above the image, if it has one)',
+        palace.environment?.captions !== false,
+        (on) => this.handlers.setCaptions(on),
+      ),
+    );
+    const hint = div('locus-gen-hint');
+    hint.innerHTML = 'Or press <kbd>L</kbd> while walking to cycle both.';
+    wrap.appendChild(hint);
+    return wrap;
+  }
+
   /** Background colour picker + preset swatches; changes apply live and are undoable. */
   private worldSection(palace: Palace): HTMLElement {
     const wrap = div('editor-world');
@@ -525,22 +593,6 @@ export class EditorPanel {
 
     // Mnemonic text in the world — on by default: without image generation set up,
     // the words are the whole point of visiting a locus.
-    wrap.appendChild(
-      checkRow(
-        'Show location cue in the world',
-        'Float each locus’s location cue above its marker — the heading you navigate by',
-        palace.environment?.cueLabels !== false,
-        (on) => this.handlers.setCueLabels(on),
-      ),
-    );
-    wrap.appendChild(
-      checkRow(
-        'Show mnemonic text in the world',
-        'Float each locus’s mnemonic as a plaque above its marker (above the image, if it has one)',
-        palace.environment?.captions !== false,
-        (on) => this.handlers.setCaptions(on),
-      ),
-    );
 
     // Player scale — be tiny (space feels huge) or a giant. The 🚶 button drops a
     // person-sized reference so you can eyeball the scale.
@@ -660,8 +712,9 @@ export class EditorPanel {
       // lands on a doorframe edge or an angled face, the tableau hangs off sideways
       // — one click re-aims it at wherever you're standing.
       const aimRow = div('locus-gen-row');
-      const aim = button('🎯 Aim at me', '', () => this.handlers.aimAtMe(locus.id));
-      aim.title = 'Point this locus at the camera, so its image/model face you and stand off the surface toward you';
+      const aim = button('🎯 Re-aim at camera', '', () => this.handlers.aimAtMe(locus.id));
+      aim.title =
+        'Re-aim this locus’s anchor at where you are standing, so its image / 3D model face you and stand off the surface toward you (it does not move the marker)';
       aimRow.appendChild(aim);
       wrap.appendChild(aimRow);
 

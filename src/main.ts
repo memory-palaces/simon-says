@@ -239,6 +239,8 @@ class App {
       setPlayerScale: (v) => this.setPlayerScale(v),
       setCaptions: (on) => this.setCaptions(on),
       setCueLabels: (on) => this.setCueLabels(on),
+      cycleLabels: () => this.cycleWorldText(),
+      toggleHelp: () => this.helpOverlay.toggle(),
       toggleScaleFigure: () => this.toggleScaleFigure(),
       setBackendId: (id) => this.setBackendId(id),
       generate: (id) => this.generateFor(id),
