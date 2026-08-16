@@ -23,7 +23,8 @@ import { MapOverlay } from './ui/mapOverlay';
 import { chooseAction } from './ui/choice';
 import {
   buildPrompt,
-  DEFAULT_FAL_MODEL,
+  KEY_PROVIDERS,
+  providerModel,
   DEFAULT_LOCAL_URL,
   DEFAULT_LOCAL_WORKFLOW,
   getBackend,
@@ -128,7 +129,6 @@ class App {
   private readonly helpOverlay = new HelpOverlay(this.mount);
   private readonly mapOverlay = new MapOverlay(this.mount, (path) => void this.jumpToWorld(path));
   private readonly settingsDialog = new SettingsDialog(this.mount, {
-    setFalConfig: (apiKey, model) => this.setFalConfig(apiKey, model),
     setLocalConfig: (url, workflow) => this.setLocalConfig(url, workflow),
     testLocal: () => this.testLocal(),
     setPreamble: (text) => this.setPreamble(text),
@@ -249,7 +249,6 @@ class App {
       setObjectScale: (id, v) => this.setObjectScale(id, v),
       setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
       setStyle: (id) => this.setStyle(id),
-      setFalModel: (model) => this.setFalModel(model),
       setProviderModel: (id, model) => this.setProviderModel(id, model),
       enterPortal: (id) => void this.enterPortal(id),
       removePortal: (id) => this.removePortal(id),
@@ -993,8 +992,9 @@ class App {
       activeId: this.activeBackendId(),
       can3d: getBackend(this.activeBackendId())?.can3d ?? false,
       styleId: this.palace.generation?.style ?? 'none',
-      falModel: this.genSettings.fal?.model ?? DEFAULT_FAL_MODEL,
-      providerModels: this.genSettings.models ?? {},
+      // Resolved per provider (not the raw map) so the dropdown shows exactly what
+      // the backend will send — including fal.ai's pre-existing legacy model slot.
+      providerModels: Object.fromEntries(KEY_PROVIDERS.map((p) => [p.id, providerModel(p.id, p.defaultModel)])),
     });
   }
 
@@ -1187,19 +1187,10 @@ class App {
     this.renderEditor();
   }
 
-  private setFalModel(model: string): void {
-    this.genSettings = { ...this.genSettings, fal: { apiKey: this.genSettings.fal?.apiKey ?? '', model } };
-    saveGenerationSettings(this.genSettings);
-    this.renderEditor();
-  }
+
 
   private setLocalConfig(url: string, workflow: string): void {
     this.genSettings = { ...this.genSettings, local: { url, imageWorkflow: workflow } };
-    saveGenerationSettings(this.genSettings);
-  }
-
-  private setFalConfig(apiKey: string, model: string): void {
-    this.genSettings = { ...this.genSettings, fal: { apiKey, model } };
     saveGenerationSettings(this.genSettings);
   }
 
@@ -1216,6 +1207,11 @@ class App {
     if (key.trim()) keys[providerId] = key.trim();
     else delete keys[providerId];
     this.genSettings = { ...this.genSettings, keys };
+    // fal.ai's key used to live in its own slot; drop it so clearing the field
+    // really clears the key rather than falling back to the old value.
+    if (providerId === 'fal' && this.genSettings.fal) {
+      this.genSettings = { ...this.genSettings, fal: { ...this.genSettings.fal, apiKey: keys.fal ?? '' } };
+    }
     saveGenerationSettings(this.genSettings);
   }
 

@@ -1,5 +1,4 @@
 import {
-  DEFAULT_FAL_MODEL,
   DEFAULT_LOCAL_URL,
   DEFAULT_LOCAL_WORKFLOW,
   type FalConfig,
@@ -16,7 +15,6 @@ import {
  * the editor; the keys/endpoints that power those pipelines live here.
  */
 export interface SettingsHandlers {
-  setFalConfig(apiKey: string, model: string): void;
   setLocalConfig(url: string, workflow: string): void;
   /** Store (or clear) the API key for a key-only cloud provider. */
   setProviderKey(providerId: string, key: string): void;
@@ -136,34 +134,28 @@ export class SettingsDialog {
       'Use a key you can revoke, and set a spend limit where the provider offers one.';
     wrap.appendChild(warn);
 
-    // The key-only cloud providers (OpenRouter, OpenAI, Stability, Gemini). Each is
-    // pure data — see KEY_PROVIDERS in model/generation.ts.
+    // Cloud providers, rendered from KEY_PROVIDERS (ordered 3D-capable first).
+    let headed = false;
     for (const provider of KEY_PROVIDERS) {
+      if (provider.can3d && !headed) {
+        wrap.appendChild(groupLabel('Images + 3D'));
+        headed = true;
+      } else if (!provider.can3d && headed) {
+        wrap.appendChild(groupLabel('Images only'));
+        headed = false; // only emit each heading once, in order
+      }
       const f = field(provider.label, 'paste your key');
       const input = f.input as HTMLInputElement;
       input.type = 'password';
       input.autocomplete = 'off';
-      input.value = config.keys?.[provider.id] ?? '';
+      input.value = config.keys?.[provider.id] ?? (provider.id === 'fal' ? (config.fal?.apiKey ?? '') : '');
       input.oninput = () => this.handlers.setProviderKey(provider.id, input.value);
       wrap.appendChild(f.el);
       const hint = div('settings-hint');
       hint.innerHTML = provider.hint;
       wrap.appendChild(hint);
     }
-
-    // fal.ai
-    const falKey = field('fal.ai API key', 'paste your key');
-    (falKey.input as HTMLInputElement).type = 'password';
-    (falKey.input as HTMLInputElement).autocomplete = 'off';
-    falKey.input.value = config.fal?.apiKey ?? '';
-    // The model is chosen per-world on the sidebar, so only the key lives here; keep
-    // whatever model was already set when saving the key.
-    const saveFal = () => this.handlers.setFalConfig((falKey.input as HTMLInputElement).value, config.fal?.model ?? DEFAULT_FAL_MODEL);
-    falKey.input.oninput = saveFal;
-    wrap.append(falKey.el);
-    const falHint = div('settings-hint');
-    falHint.innerHTML = 'Key from <code>fal.ai/dashboard/keys</code>. Stored in this browser; sent only to fal.ai. Pick the model per world on the sidebar.';
-    wrap.appendChild(falHint);
+    wrap.appendChild(groupLabel('Local'));
 
     // Local ComfyUI
     const url = field('ComfyUI URL', DEFAULT_LOCAL_URL);
@@ -234,6 +226,13 @@ export class SettingsDialog {
 function div(className: string): HTMLElement {
   const el = document.createElement('div');
   el.className = className;
+  return el;
+}
+
+/** A small sub-heading inside a settings section (e.g. "Images + 3D"). */
+function groupLabel(text: string): HTMLElement {
+  const el = div('settings-group');
+  el.textContent = text;
   return el;
 }
 

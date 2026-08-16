@@ -1,5 +1,5 @@
 import { BACKGROUND_PATTERNS, DEFAULT_BACKGROUND, lociInOrder, type Decor, type Locus, type Palace, type Portal, type SceneProp } from '../model/palace';
-import { DEFAULT_FAL_MODEL, FAL_MODEL_PRESETS, NONE_ID, STYLE_PRESETS, keyProvider } from '../model/generation';
+import { NONE_ID, STYLE_PRESETS, keyProvider } from '../model/generation';
 import { downloadAsset } from './download';
 
 interface GenState {
@@ -7,7 +7,6 @@ interface GenState {
   activeId: string;
   can3d: boolean;
   styleId: string;
-  falModel: string;
   /** Chosen model per key-only provider id (falls back to that provider's default). */
   providerModels: Record<string, string>;
 }
@@ -55,7 +54,6 @@ export interface EditorHandlers {
   selectAttachment(id: string, index: number): void;
   removeAttachment(id: string, index: number): void;
   setStyle(id: string): void;
-  setFalModel(model: string): void;
   setProviderModel(providerId: string, model: string): void;
   enterPortal(id: string): void;
   removePortal(id: string): void;
@@ -136,7 +134,6 @@ export class EditorPanel {
     activeId: NONE_ID,
     can3d: false,
     styleId: 'none',
-    falModel: DEFAULT_FAL_MODEL,
     providerModels: {},
   };
 
@@ -999,12 +996,8 @@ export class EditorPanel {
     wrap.appendChild(select);
 
     if (this.gen.activeId !== NONE_ID) {
-      // Quick model switch (fal only) — different models suit different subjects.
-      if (this.gen.activeId === 'fal') {
-        wrap.appendChild(
-          labeledSelect('Model', FAL_MODEL_PRESETS, this.gen.falModel, (v) => this.handlers.setFalModel(v)),
-        );
-      }
+      // Quick model switch — every cloud provider (fal included) comes from the
+      // same table, so different models can suit different subjects.
       const provider = keyProvider(this.gen.activeId);
       if (provider) {
         wrap.appendChild(

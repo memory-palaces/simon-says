@@ -130,23 +130,27 @@ is much easier to turn into a clean 3D mesh.
 - **Placeholder (offline)** — no setup, no keys. Renders your prompt onto a card.
   Good for trying the whole flow, including a stand-in "3D" mesh.
 
-- **OpenRouter (cloud, API key)** — the easiest cloud option and a good default:
-  one key reaches most current image models (Gemini Flash Image, FLUX.2, GPT Image,
-  Seedream, Qwen…). Key from `openrouter.ai/keys`, paste it in **Settings (⚙)**, pick
-  the model per world on the sidebar.
+Providers are listed **3D-capable first**, because a palace with real objects in it
+is the point. Only two can turn an approved image into a mesh:
 
-- **OpenAI (cloud, API key)** — `gpt-image-1.5` / `gpt-image-1` / DALL·E 3. Key from
+- **fal.ai (images + 3D)** — fast, cheap images (Flux schnell) and TRELLIS for
+  image→3D. The most complete single choice.
+
+- **Stability AI (images + 3D)** — Stable Image Core / Ultra / SD 3.5, plus Stable
+  Fast 3D, which returns a GLB in one call. Key from `platform.stability.ai`.
+
+Images only (no 3D — OpenRouter's catalogue outputs text, image and audio, nothing
+meshy):
+
+- **OpenRouter (images)** — the easiest starting point: one key reaches most current
+  image models (Gemini Flash Image, FLUX.2, GPT Image, Seedream, Qwen…). Key from
+  `openrouter.ai/keys`.
+
+- **OpenAI (images)** — gpt-image-1.5 / gpt-image-1 / mini / DALL·E 3. Key from
   `platform.openai.com/api-keys`.
 
-- **Stability AI (cloud, API key)** — Stable Image Core / Ultra / SD 3.5, **and** a
-  second image→3D path: Stable Fast 3D returns a GLB in one call. Key from
-  `platform.stability.ai`.
-
-- **Google Gemini (cloud, API key)** — Gemini 3.1 Flash Image and friends. Key from
+- **Google Gemini (images)** — Gemini 3.1 Flash Image and friends. Key from
   `aistudio.google.com/apikey`.
-
-- **fal.ai (cloud, API key)** — fast/cheap models (Flux schnell) and TRELLIS for
-  image→3D.
   1. Sign up at [fal.ai](https://fal.ai) and create a key at
      `fal.ai/dashboard/keys`.
   2. Open **Settings (⚙)** → paste the key. Pick a **Model** in the panel.

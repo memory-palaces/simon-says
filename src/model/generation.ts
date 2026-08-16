@@ -94,14 +94,25 @@ export function applyStyle(prompt: string, styleId?: string): string {
   return buildPrompt(prompt, styleId);
 }
 
-/** Read a stored key for a key-only provider. */
+/**
+ * Read a stored key for a cloud provider. fal.ai predates the generic `keys` map,
+ * so fall back to its old home — an existing key keeps working untouched.
+ */
 export function providerKey(id: string): string {
-  return loadGenerationSettings().keys?.[id]?.trim() ?? '';
+  const s = loadGenerationSettings();
+  const generic = s.keys?.[id]?.trim();
+  if (generic) return generic;
+  if (id === 'fal') return s.fal?.apiKey?.trim() ?? '';
+  return '';
 }
 
-/** Read the chosen model for a provider, or its default. */
+/** Read the chosen model for a provider, or its default (same fal fallback). */
 export function providerModel(id: string, fallback: string): string {
-  return loadGenerationSettings().models?.[id]?.trim() || fallback;
+  const s = loadGenerationSettings();
+  const generic = s.models?.[id]?.trim();
+  if (generic) return generic;
+  if (id === 'fal') return s.fal?.model?.trim() || fallback;
+  return fallback;
 }
 
 /** A tiny stable string hash (FNV-1a) for cache keys keyed on the prompt. */
@@ -347,7 +358,7 @@ export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODEL_PRESETS[0].id;
  */
 export class OpenRouterBackend implements GenerationBackend {
   readonly id = 'openrouter';
-  readonly label = 'OpenRouter (cloud, API key)';
+  readonly label = 'OpenRouter (images)';
   readonly offline = false;
   readonly can3d = false;
 
@@ -394,7 +405,7 @@ export const DEFAULT_OPENAI_MODEL = OPENAI_MODEL_PRESETS[0].id;
  */
 export class OpenAIBackend implements GenerationBackend {
   readonly id = 'openai';
-  readonly label = 'OpenAI (cloud, API key)';
+  readonly label = 'OpenAI (images)';
   readonly offline = false;
   readonly can3d = false;
 
@@ -432,7 +443,7 @@ export const DEFAULT_STABILITY_MODEL = STABILITY_MODEL_PRESETS[0].id;
  */
 export class StabilityBackend implements GenerationBackend {
   readonly id = 'stability';
-  readonly label = 'Stability AI (cloud, API key)';
+  readonly label = 'Stability AI (images + 3D)';
   readonly offline = false;
   readonly can3d = true;
 
@@ -488,7 +499,7 @@ export const DEFAULT_GEMINI_MODEL = GEMINI_MODEL_PRESETS[0].id;
  */
 export class GeminiBackend implements GenerationBackend {
   readonly id = 'gemini';
-  readonly label = 'Google Gemini (cloud, API key)';
+  readonly label = 'Google Gemini (images)';
   readonly offline = false;
   readonly can3d = false;
 
@@ -531,17 +542,17 @@ export interface FalConfig {
  */
 export class FalBackend implements GenerationBackend {
   readonly id = 'fal';
-  readonly label = 'fal.ai (cloud, API key)';
+  readonly label = 'fal.ai (images + 3D)';
   readonly offline = false;
   readonly can3d = true;
 
   /** Image → GLB via fal-ai/trellis. Unverified here (needs a key). */
   async imageTo3d(imageDataUrl: string): Promise<string> {
-    const cfg = loadGenerationSettings().fal;
-    if (!cfg?.apiKey) throw new Error('Enter your fal.ai API key in Settings.');
+    const key = providerKey('fal');
+    if (!key) throw new Error('Enter your fal.ai API key in Settings (⚙).');
     const res = await fetch('https://fal.run/fal-ai/trellis', {
       method: 'POST',
-      headers: { Authorization: `Key ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_url: imageDataUrl }),
     });
     if (!res.ok) throw new Error(`fal.ai 3D error ${res.status}. (Large images may need a hosted URL.)`);
@@ -554,14 +565,14 @@ export class FalBackend implements GenerationBackend {
   }
 
   async generateImage(prompt: string, seed: number): Promise<string> {
-    const cfg = loadGenerationSettings().fal;
-    if (!cfg?.apiKey) throw new Error('Enter your fal.ai API key in the Generation panel.');
-    const model = cfg.model?.trim() || DEFAULT_FAL_MODEL;
+    const key = providerKey('fal');
+    if (!key) throw new Error('Enter your fal.ai API key in Settings (⚙).');
+    const model = providerModel('fal', DEFAULT_FAL_MODEL);
     const seedVal = (parseInt(promptHash(prompt), 16) + seed * 100003) % 2147483647;
 
     const res = await fetch(`https://fal.run/${model}`, {
       method: 'POST',
-      headers: { Authorization: `Key ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, num_images: 1, image_size: 'square_hd', seed: seedVal }),
     });
     if (!res.ok) {
@@ -586,12 +597,13 @@ export class FalBackend implements GenerationBackend {
 }
 
 /** Backends available in this build. `none` is represented by absence (null). */
+// Same order as KEY_PROVIDERS: the two that can also make a 3D mesh first.
 const BACKENDS: GenerationBackend[] = [
   new PlaceholderBackend(),
-  new OpenRouterBackend(),
-  new OpenAIBackend(),
   new FalBackend(),
   new StabilityBackend(),
+  new OpenRouterBackend(),
+  new OpenAIBackend(),
   new GeminiBackend(),
   new LocalComfyBackend(),
 ];
@@ -628,35 +640,53 @@ export interface KeyProviderMeta {
   /** Model choices offered per world in the sidebar. */
   models: Array<{ id: string; label: string }>;
   defaultModel: string;
+  /** True if this provider can also turn an approved image into a 3D mesh. */
+  can3d?: boolean;
 }
 
-/** Everything the Settings dialog and the sidebar need to offer a provider. */
+/**
+ * Everything the Settings dialog and the sidebar need to offer a provider.
+ *
+ * Ordered by capability, not alphabet: the two that can also produce a 3D mesh come
+ * first, because a memory palace with real objects in it is the point. OpenRouter is
+ * the widest image-only choice (one key, most current models) — it has no 3D output
+ * at all; its model catalogue exposes only text/image/audio.
+ */
 export const KEY_PROVIDERS: KeyProviderMeta[] = [
+  {
+    id: 'fal',
+    label: 'fal.ai API key',
+    hint: 'Key from <code>fal.ai/dashboard/keys</code>. Fast, cheap images <b>and</b> image→3D (TRELLIS).',
+    models: FAL_MODEL_PRESETS,
+    defaultModel: DEFAULT_FAL_MODEL,
+    can3d: true,
+  },
+  {
+    id: 'stability',
+    label: 'Stability AI API key',
+    hint: 'Key from <code>platform.stability.ai</code>. Images <b>and</b> image→3D (Stable Fast 3D).',
+    models: STABILITY_MODEL_PRESETS,
+    defaultModel: DEFAULT_STABILITY_MODEL,
+    can3d: true,
+  },
   {
     id: 'openrouter',
     label: 'OpenRouter API key',
-    hint: 'Key from <code>openrouter.ai/keys</code>. One key, most current image models — a good default.',
+    hint: 'Key from <code>openrouter.ai/keys</code>. One key, most current image models — the easiest starting point. Images only.',
     models: OPENROUTER_MODEL_PRESETS,
     defaultModel: DEFAULT_OPENROUTER_MODEL,
   },
   {
     id: 'openai',
     label: 'OpenAI API key',
-    hint: 'Key from <code>platform.openai.com/api-keys</code>.',
+    hint: 'Key from <code>platform.openai.com/api-keys</code>. Images only.',
     models: OPENAI_MODEL_PRESETS,
     defaultModel: DEFAULT_OPENAI_MODEL,
   },
   {
-    id: 'stability',
-    label: 'Stability AI API key',
-    hint: 'Key from <code>platform.stability.ai</code>. Also does image→3D (Stable Fast 3D) alongside fal.ai.',
-    models: STABILITY_MODEL_PRESETS,
-    defaultModel: DEFAULT_STABILITY_MODEL,
-  },
-  {
     id: 'gemini',
     label: 'Google Gemini API key',
-    hint: 'Key from <code>aistudio.google.com/apikey</code>.',
+    hint: 'Key from <code>aistudio.google.com/apikey</code>. Images only.',
     models: GEMINI_MODEL_PRESETS,
     defaultModel: DEFAULT_GEMINI_MODEL,
   },

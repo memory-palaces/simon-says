@@ -1631,3 +1631,13 @@ canvas.picking {
   color: #ffcf5c;
   opacity: 0.95;
 }
+
+/* Sub-heading inside a settings section ("Images + 3D" / "Images only"). */
+.settings-group {
+  margin-top: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ui-accent);
+  opacity: 0.85;
+}
