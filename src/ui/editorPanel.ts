@@ -251,11 +251,14 @@ export class EditorPanel {
       // pair goes after the separator, so a wrap breaks between the two ideas.
       rowFile.append(btnGroup(save, open, button('New', '', () => this.handlers.newPalace())), sep(), btnGroup(imp, exp));
     } else {
-      const save = button('Save', '', () => this.handlers.save());
-      save.title = 'Download this world as a .json file';
-      const open = button('Open', '', () => this.handlers.load());
-      open.title = 'Open a .json world file';
-      rowFile.append(save, open, button('New', '', () => this.handlers.newPalace()));
+      // No local server (e.g. the hosted app): Save/Open ARE export/import — they
+      // write and read a .json file — so separate Import/Export buttons would just
+      // be the same two actions under different names. Labelled to say so.
+      const save = button('⬇ Save .json', '', () => this.handlers.save());
+      save.title = 'Export: download this world as a .json file you own';
+      const open = button('⬆ Open .json', '', () => this.handlers.load());
+      open.title = 'Import: open a .json world file from your computer';
+      rowFile.append(btnGroup(save, open), button('New', '', () => this.handlers.newPalace()));
     }
     const newBtn = rowFile.querySelector<HTMLButtonElement>('button:last-of-type');
     if (newBtn?.textContent === 'New') newBtn.title = 'Start a fresh world — keep this space or pick another';
@@ -269,10 +272,6 @@ export class EditorPanel {
     const assets = button('🗂 Assets', '', () => this.handlers.openAssets());
     assets.title = 'See and reuse every image / 3D model in this world';
     rowWorld.appendChild(assets);
-
-    const labels = button('🏷 Labels', '', () => this.handlers.cycleLabels());
-    labels.title = 'Show / hide the in-world text: cue + mnemonic → cue only → none (L)';
-    rowWorld.appendChild(labels);
 
     const recenter = button('⌖ Recenter', '', () => this.handlers.recenter());
     recenter.title = 'Drop back onto the floor (R)';
@@ -320,7 +319,9 @@ export class EditorPanel {
         `✓ Autosaves as you work. <b>Save</b> / <b>Open</b> keep worlds in ${folder}; <b>Import</b> / <b>Export</b> use .json files. ` +
         'Have a .json from before? <b>Import</b> it, then <b>Save</b>.';
     } else {
-      autosave.textContent = '✓ Autosaves to this browser as you work · Save / Open use .json files';
+      autosave.innerHTML =
+        '✓ Autosaves to this browser as you work. <b>Save .json</b> downloads the world (that <i>is</i> the export); ' +
+        '<b>Open .json</b> loads one back in. Run it locally (<code>npm run dev</code>) to save straight into a folder instead.';
     }
     this.root.appendChild(autosave);
 
