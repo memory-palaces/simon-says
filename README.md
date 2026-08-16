@@ -88,6 +88,10 @@ The app has three modes: **walk** (first person), **edit** (the side panel), and
    one step). Your work also autosaves to the browser as you go, and there's full
    **undo/redo** (`Ctrl/Cmd+Z`).
 
+If an attached image or 3D object ends up buried in the wall you pinned it to, use
+**Push out** in the locus panel to slide it off the surface (and the ⇔⇕ toggle for
+sideways/vertical). `X` toggles x-ray if you'd rather see everything through walls.
+
 **Review**: click **Review ▸** to walk the route in order — each stop shows the
 location, you recall the image, then press **Space** to reveal your own words.
 

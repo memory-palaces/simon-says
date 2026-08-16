@@ -248,6 +248,7 @@ class App {
       removeAttachment: (id, i) => this.removeAttachment(id, i),
       setObjectScale: (id, v) => this.setObjectScale(id, v),
       setObjectRotation: (id, axis, v) => this.setObjectRotation(id, axis, v),
+      setObjectOffset: (id, axis, v) => this.setObjectOffset(id, axis, v),
       setStyle: (id) => this.setStyle(id),
       setProviderModel: (id, model) => this.setProviderModel(id, model),
       enterPortal: (id) => void this.enterPortal(id),
@@ -1869,6 +1870,21 @@ class App {
 
   private setObjectScale(id: string, value: number): void {
     this.mutateLocus(id, (l) => (l.object_scale = value), false);
+    this.loci.sync(this.palace);
+    this.checkpointSoon();
+  }
+
+  /** Nudge a locus's attached image/mesh: 0 = right, 1 = up, 2 = out along the normal. */
+  private setObjectOffset(id: string, axis: number, value: number): void {
+    this.mutateLocus(
+      id,
+      (l) => {
+        const off: Vec3 = [...(l.object_offset ?? [0, 0, 0])] as Vec3;
+        off[axis] = value;
+        l.object_offset = off;
+      },
+      false,
+    );
     this.loci.sync(this.palace);
     this.checkpointSoon();
   }

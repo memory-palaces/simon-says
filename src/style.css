@@ -1641,3 +1641,24 @@ canvas.picking {
   color: var(--ui-accent);
   opacity: 0.85;
 }
+
+/* Secondary nudge axes, hidden until asked for. */
+.nudge-more {
+  display: none;
+}
+.nudge-more.open {
+  display: block;
+}
+
+/* A quiet, text-like button (e.g. the "nudge sideways / up" disclosure). */
+.btn.link {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--ui-dim);
+  font-size: 11.5px;
+  text-align: left;
+}
+.btn.link:hover {
+  color: var(--ui-fg);
+}

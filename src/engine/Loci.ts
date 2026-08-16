@@ -53,6 +53,8 @@ interface Marker {
   portal?: THREE.Mesh;
   /** Per-object transform (applies to the image/mesh only, not the orb). */
   objectScale: number;
+  /** Per-object nudge [right, up, out] in metres (see Locus.object_offset). */
+  objectOffset: THREE.Vector3;
   objectRot: THREE.Vector3; // degrees
   /** Loaded mesh's box centre + max dimension, for scaling/positioning. */
   meshRawCenter?: THREE.Vector3;
@@ -89,6 +91,7 @@ export class LociLayer {
   private readonly inv = new THREE.Matrix4();
   private readonly tmpRight = new THREE.Vector3();
   private readonly tmpUp = new THREE.Vector3();
+  private readonly tmpNudge = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, resolve: ResolveAsset) {
     this.group.name = 'loci';
@@ -118,6 +121,8 @@ export class LociLayer {
       // scales/rotates independently (see positionChildren).
       marker.group.scale.setScalar(this.markerScale);
       marker.objectScale = locus.object_scale ?? 1;
+      const off = locus.object_offset ?? [0, 0, 0];
+      marker.objectOffset.set(off[0], off[1], off[2]);
       const r = locus.object_rotation ?? [0, 0, 0];
       marker.objectRot.set(r[0], r[1], r[2]);
       this.updatePortal(marker);
@@ -301,10 +306,22 @@ export class LociLayer {
   private positionChildren(marker: Marker): void {
     const os = marker.objectScale;
     if (marker.portal) marker.portal.quaternion.setFromUnitVectors(PORTAL_AXIS, marker.normal);
+
+    // The user's nudge, expressed in the locus's own frame: right / up / out.
+    const right = this.tmpRight;
+    const up = this.tmpUp;
+    this.basisFromNormal(marker.normal, right, up);
+    const nudge = this.tmpNudge
+      .set(0, 0, 0)
+      .addScaledVector(right, marker.objectOffset.x)
+      .addScaledVector(up, marker.objectOffset.y)
+      .addScaledVector(marker.normal, marker.objectOffset.z);
+
     if (marker.image) {
       marker.image.scale.setScalar(0.9 * os);
       marker.image.position.copy(marker.normal).multiplyScalar(0.5 * os);
       marker.image.position.y += 0.8 * os;
+      marker.image.position.add(nudge);
     }
     if (marker.caption) {
       // Sit above the image when one is showing, otherwise take its place.
@@ -314,6 +331,7 @@ export class LociLayer {
       marker.caption.position.copy(marker.normal).multiplyScalar(0.5 * os);
       const imageShown = !!marker.image && marker.image.visible;
       marker.caption.position.y += imageShown ? 0.8 * os + 0.45 * os + h * 0.5 + 0.05 : 0.75;
+      if (imageShown) marker.caption.position.add(nudge); // follow the image it labels
     }
     if (marker.mesh3d && marker.meshRawCenter && marker.meshMaxDim) {
       // Fit into ~0.8u, times the per-locus object scale.
@@ -324,6 +342,7 @@ export class LociLayer {
       // recentre, then push out past the wall by its half-size and lift slightly.
       marker.mesh3d.position.copy(marker.meshRawCenter).multiplyScalar(-scale).addScaledVector(marker.normal, half + 0.15);
       marker.mesh3d.position.y += 0.3 * os;
+      marker.mesh3d.position.add(nudge);
     }
   }
 
@@ -464,8 +483,10 @@ export class LociLayer {
       tex.colorSpace = THREE.SRGBColorSpace;
       if (!marker.image) {
         marker.image = new THREE.Sprite(
-          // depthTest off + a high renderOrder: draw the image as an always-visible
-          // label so a nearby wall/floor can't clip the camera-facing quad.
+          // Depth-tested on purpose: the image belongs to the room, so a wall in
+          // front of it should hide it. When one ends up buried in the surface it's
+          // pinned to, the fix is the per-locus "Push out" nudge (object_offset) —
+          // or X for x-ray, which turns depth testing off everywhere.
           new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }),
         );
         marker.image.scale.setScalar(0.9);
@@ -756,6 +777,7 @@ export class LociLayer {
       order: 0,
       normal: new THREE.Vector3(0, 1, 0),
       objectScale: 1,
+      objectOffset: new THREE.Vector3(),
       objectRot: new THREE.Vector3(0, 0, 0),
       props: new Map(),
     };

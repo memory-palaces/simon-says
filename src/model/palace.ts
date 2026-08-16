@@ -40,6 +40,12 @@ export interface Locus {
   object_scale?: number;
   /** Per-locus mesh rotation in degrees [x, y, z] (images are billboards, unaffected). */
   object_rotation?: Vec3;
+  /**
+   * Nudge the attached image/mesh off the surface, in metres, in the locus's own
+   * frame: [right, up, out]. "out" is along the surface normal — the one you reach
+   * for when a billboard is buried in the wall it's pinned to.
+   */
+  object_offset?: Vec3;
   /** Every image/mesh ever generated or attached here — rotate between them. */
   gallery?: Attachment[];
   /**

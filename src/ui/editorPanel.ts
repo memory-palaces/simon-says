@@ -51,6 +51,8 @@ export interface EditorHandlers {
   attachMesh(id: string): void;
   setObjectScale(id: string, value: number): void;
   setObjectRotation(id: string, axis: number, value: number): void;
+  /** Nudge the attached image/mesh: axis 0 = right, 1 = up, 2 = out along the normal. */
+  setObjectOffset(id: string, axis: number, value: number): void;
   selectAttachment(id: string, index: number): void;
   removeAttachment(id: string, index: number): void;
   setStyle(id: string): void;
@@ -571,18 +573,30 @@ export class EditorPanel {
     const pr = prField.input as HTMLTextAreaElement;
     pr.value = locus.image_prompt;
     pr.oninput = () => {
+      const hadPrompt = locus.image_prompt.trim().length > 0;
+      locus.image_prompt = pr.value; // keep the object we're rendering from in step
       this.handlers.updatePrompt(id, pr.value);
       const row = this.rowPrompts.get(id);
       if (row) {
         row.textContent = pr.value || 'no mnemonic yet';
         row.classList.toggle('empty', !pr.value);
       }
+      // The Render button only exists once there's a prompt. Swap that one block in
+      // place the moment the field stops (or starts) being empty — a full re-render
+      // here would steal focus mid-sentence, which is why it used to wait for a
+      // trip out to the world and back.
+      if (hadPrompt !== pr.value.trim().length > 0) {
+        const fresh = this.generateControls(locus);
+        genControls.replaceWith(fresh);
+        genControls = fresh;
+      }
     };
     wrap.appendChild(prField.el);
 
     // Generate from the prompt (always available — falls back to the offline
     // placeholder if no pipeline is chosen for this world).
-    wrap.appendChild(this.generateControls(locus));
+    let genControls = this.generateControls(locus);
+    wrap.appendChild(genControls);
 
     // Gallery: every image/mesh made or attached here — click to make it the one
     // that represents this locus; ✕ to discard it.
@@ -609,6 +623,45 @@ export class EditorPanel {
           onChange: (v) => this.handlers.setObjectScale(locus.id, v),
         }),
       );
+    }
+
+    // Push the attached thing off the surface. "Out" is the one people actually
+    // need — a billboard pinned to a door renders half-buried in the house — so it
+    // gets a slider, and the other two axes hide behind a toggle to keep this panel
+    // from turning into a transform editor.
+    if (locus.image_2d || locus.mesh_3d) {
+      const off = locus.object_offset ?? [0, 0, 0];
+      wrap.appendChild(
+        sliderRow({
+          label: 'Push out',
+          min: -2,
+          max: 6,
+          step: 0.1,
+          value: off[2],
+          def: 0,
+          onChange: (v) => this.handlers.setObjectOffset(locus.id, 2, v),
+        }),
+      );
+      const more = div('nudge-more');
+      const toggle = button('⇔ ⇕ nudge sideways / up', 'link', () => {
+        more.classList.toggle('open');
+        toggle.textContent = more.classList.contains('open') ? '× hide nudge' : '⇔ ⇕ nudge sideways / up';
+      });
+      toggle.title = 'Slide the image/mesh along the wall';
+      (['Move sideways', 'Move up'] as const).forEach((label, axis) => {
+        more.appendChild(
+          sliderRow({
+            label,
+            min: -3,
+            max: 3,
+            step: 0.1,
+            value: off[axis],
+            def: 0,
+            onChange: (v) => this.handlers.setObjectOffset(locus.id, axis, v),
+          }),
+        );
+      });
+      wrap.append(toggle, more);
     }
 
     // Rotation for a 3D mesh (images are camera-facing billboards, no rotation).
