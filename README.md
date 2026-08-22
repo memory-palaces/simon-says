@@ -312,12 +312,19 @@ Source layout:
 
 ## Status
 
-Implemented: first-person walkthrough; drop/move/delete/reorder loci; save/load;
-review; text mnemonics; autosave + undo/redo; image generation (offline placeholder,
-fal.ai cloud, local ComfyUI) with styles, history, and an image→3D stage.
+Works today: first-person walkthrough of any `.glb`; drop / move / delete / reorder
+loci; per-locus location cue, mnemonic text and freeform notes; review mode that
+walks the route and quizzes you; portals between worlds plus a world map; scene
+props and free-standing decor; an assets library to reuse anything you've made;
+autosave, full undo/redo, save/open as `.json`; bird's-eye view with click-to-travel;
+per-world player scale, brightness and sky; image generation through fal.ai,
+Stability, OpenRouter, OpenAI, Google Gemini or a local ComfyUI, with an image→3D
+stage via fal.ai (TRELLIS).
 
-Not yet: local (ComfyUI/TRELLIS) image→3D; nested child palaces; the baked-GLB export
-in Addendum A.
+Rough edges / not yet: local ComfyUI image→3D; Stability's image→3D is wired but
+unverified against a live key; no touch controls, so authoring needs a mouse and
+keyboard (review mostly works on a phone); no built-in way to publish a palace for
+others — see `kanban/` for the roadmap.
 
 See `SPEC.md` for the full design and build order.
 
@@ -330,4 +337,5 @@ See `SPEC.md` for the full design and build order.
 
 ## License
 
-MIT. Sample models are CC-BY / MIT from the Khronos glTF-Sample-Assets repository.
+MIT. The bundled worlds are built from [Kenney](https://kenney.nl)'s CC0 kits;
+Virtual City and Sponza are CC-BY / MIT from the Khronos glTF-Sample-Assets repository.
